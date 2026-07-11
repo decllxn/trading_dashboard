@@ -1,7 +1,7 @@
 /**
  * Drizzle schema — single source of truth for the Postgres tables.
  *
- * Phase 2a introduces the `trades` table only. Later phases (2b tags, 2c
+ * Phases 2a (trades) and 2b (tags + trade_tags) live here. Later phases (2c
  * journal_entries, 2d broker_connections) append to this file; do not split
  * schemas across modules — Drizzle reads the whole `db/schema.ts` as one graph.
  *
@@ -17,11 +17,15 @@
  *   CASCADE` constraint + RLS authored in supabase/migrations/*.sql. Drizzle
  *   doesn't manage `auth.users` (it's a Supabase system table), so the FK is
  *   declared in raw DDL rather than via `.references()`.
+ * - Join tables (e.g. trade_tags) reference user-scoped tables via Drizzle's
+ *   `.references()` with `ON DELETE CASCADE` so deleting a trade or tag cleans
+ *   up its join rows automatically.
  */
 import {
   numeric,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uuid,
@@ -116,3 +120,66 @@ export const trades = pgTable('trades', {
 /** Type helpers — import these in app code instead of re-deriving from the table. */
 export type Trade = typeof trades.$inferSelect;
 export type NewTrade = typeof trades.$inferInsert;
+/** Union of valid asset_class values: 'equity' | 'forex' | 'futures' | 'crypto' | 'option'. */
+export type AssetClass = (typeof assetClassEnum.enumValues)[number];
+/** 'long' | 'short'. */
+export type Direction = (typeof directionEnum.enumValues)[number];
+/** 'open' | 'closed'. */
+export type TradeStatus = (typeof tradeStatusEnum.enumValues)[number];
+/** 'manual' | 'csv' | 'snaptrade'. */
+export type TradeSource = (typeof tradeSourceEnum.enumValues)[number];
+
+/**
+ * tag_category — the facet of a trade a tag describes. Stored as a native
+ * Postgres enum so invalid values are rejected at the DB layer. `setup` =
+ * user-defined strategy/setups (the default seed leaves this empty for the
+ * user to fill in); `ict_concept`, `session`, `emotion` are pre-seeded.
+ */
+export const tagCategoryEnum = pgEnum('tag_category', [
+  'setup',
+  'ict_concept',
+  'session',
+  'emotion',
+]);
+
+/**
+ * tags — user-scoped labels applied to trades (many-to-many via trade_tags).
+ * One row per (user, name, category); the unique index below enforces no
+ * duplicates within a user. Seeded automatically on signup — see
+ * db/seed-tags.ts for the canonical default set and supabase/migrations/
+ * 0001_tags.sql for the trigger that plants it.
+ */
+export const tags = pgTable('tags', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull(),
+  name: text('name').notNull(),
+  category: tagCategoryEnum('category').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * trade_tags — many-to-many between trades and tags. Composite PK on
+ * (trade_id, tag_id) prevents a tag from being applied twice to the same
+ * trade. Both FKs CASCADE, so deleting either side removes the join row.
+ */
+export const tradeTags = pgTable(
+  'trade_tags',
+  {
+    tradeId: uuid('trade_id')
+      .notNull()
+      .references(() => trades.id, { onDelete: 'cascade' }),
+    tagId: uuid('tag_id')
+      .notNull()
+      .references(() => tags.id, { onDelete: 'cascade' }),
+  },
+  (t) => [primaryKey({ columns: [t.tradeId, t.tagId] })],
+);
+
+export type Tag = typeof tags.$inferSelect;
+export type NewTag = typeof tags.$inferInsert;
+/** Union of valid tag_category values: 'setup' | 'ict_concept' | 'session' | 'emotion'. */
+export type TagCategory = (typeof tagCategoryEnum.enumValues)[number];
+export type TradeTag = typeof tradeTags.$inferSelect;
+export type NewTradeTag = typeof tradeTags.$inferInsert;
