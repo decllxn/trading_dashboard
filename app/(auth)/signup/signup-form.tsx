@@ -30,6 +30,11 @@ export function SignupForm() {
           placeholder="••••••••"
         />
       </Field>
+      {state.message ? (
+        <p className="border-accent-alert/40 text-accent-alert rounded-card border bg-surface px-3 py-2 text-xs">
+          {state.message}
+        </p>
+      ) : null}
       <SubmitButton pendingLabel="Creating account…" className="w-full">
         Create account
       </SubmitButton>
