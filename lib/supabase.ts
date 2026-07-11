@@ -12,6 +12,21 @@ export function isSupabaseConfigured(): boolean {
 }
 
 /**
+ * Valid HTTP(S) URL check. Supabase's client constructor throws on malformed
+ * URLs, so callers must guard before constructing. Use this (in addition to
+ * isSupabaseConfigured) anywhere a client is built so a misconfigured URL
+ * degrades gracefully instead of 500ing.
+ */
+function isValidSupabaseUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Browser Supabase client.
  *
  * Cached on `globalThis` so HMR in dev reuses a single instance instead of
@@ -22,7 +37,7 @@ export function isSupabaseConfigured(): boolean {
 type BrowserClient = ReturnType<typeof supabaseBrowserClient>;
 
 function buildBrowserClient(): BrowserClient | null {
-  if (!isSupabaseConfigured()) return null;
+  if (!isSupabaseConfigured() || !isValidSupabaseUrl(SUPABASE_URL)) return null;
   return supabaseBrowserClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 }
 
@@ -32,7 +47,7 @@ declare global {
 }
 
 export function createClient(): BrowserClient | null {
-  if (!isSupabaseConfigured()) return null;
+  if (!isSupabaseConfigured() || !isValidSupabaseUrl(SUPABASE_URL)) return null;
   if (!globalThis.__supabaseBrowser) {
     globalThis.__supabaseBrowser = buildBrowserClient();
   }
@@ -43,11 +58,11 @@ export function createClient(): BrowserClient | null {
  * Server Supabase client, scoped to the current request via cookies().
  *
  * Use inside Server Components, Route Handlers, and Server Actions only.
- * Returns null when env vars are unset so server components can branch
- * gracefully instead of throwing.
+ * Returns null when env vars are unset (or URL malformed) so server
+ * components can branch gracefully instead of throwing.
  */
 export function createServerClient() {
-  if (!isSupabaseConfigured()) return null;
+  if (!isSupabaseConfigured() || !isValidSupabaseUrl(SUPABASE_URL)) return null;
   const cookieStore = cookies();
   return supabaseServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     cookies: {
@@ -70,15 +85,19 @@ export function createServerClient() {
 }
 
 /**
- * Refresh the Supabase session cookie on every matched request.
+ * Refresh the Supabase session cookie on every matched request + gate routes.
  *
- * Called by middleware.ts.getUser() probes the access token — if it has rotated
+ * Called by middleware.ts. getUser() probes the access token — if it has rotated
  * or expired, the refreshed cookies are written onto the forwarded response so
- * downstream server components read a valid session. No auth redirects yet
- * (Phase 1c adds route protection).
+ * downstream server components read a valid session. Route gating then runs:
+ * authenticated users hitting /login or /signup are sent to /dashboard;
+ * unauthenticated users hitting /dashboard are sent to /login. On getUser()
+ * error we do NOT redirect (a null user on error is not trustworthy).
  */
+const AUTH_ROUTES = ['/login', '/signup'];
+
 export async function updateSession(request: NextRequest) {
-  if (!isSupabaseConfigured()) {
+  if (!isSupabaseConfigured() || !isValidSupabaseUrl(SUPABASE_URL)) {
     return NextResponse.next({ request });
   }
 
@@ -103,7 +122,20 @@ export async function updateSession(request: NextRequest) {
 
   // Driving getUser() (not getSession()) refreshes cookies on the response and
   // is the source of truth for auth state server-side.
-  await supabase.auth.getUser();
+  const { data, error } = await supabase.auth.getUser();
+  const path = request.nextUrl.pathname;
+  const user = data.user;
+
+  // On error, don't gate — let the page render (server components null-check
+  // and handle gracefully). Only gate when getUser() resolved cleanly.
+  if (!error) {
+    if (user && AUTH_ROUTES.includes(path)) {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+    if (!user && path.startsWith('/dashboard')) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+  }
 
   return response;
 }
