@@ -46,6 +46,28 @@ The script is self-contained — it creates two throwaway `auth.users`, inserts 
 
 If you see `RLS BROKEN`: check that `ALTER TABLE trades ENABLE ROW LEVEL SECURITY` and `FORCE ROW LEVEL SECURITY` both ran, and that the four `trades_*_own` policies exist (`\d+ trades` in the SQL editor).
 
+## Phase 2b — tags + trade_tags
+
+Apply the tags migration the same way (SQL editor):
+
+1. Paste [`../supabase/migrations/0001_tags.sql`](../supabase/migrations/0001_tags.sql) → **Run**.
+2. Paste [`../supabase/verify_tags_rls.sql`](../supabase/verify_tags_rls.sql) → **Run**. Expect:
+
+```
+seeded tags for new user: 12  (expected 12)
+PASS: default tag set seeded on signup
+PASS: seeded rows match canonical names/categories
+PASS: intruder sees only their own tags (12, not 24)
+PASS: cannot link own trade to another user's tag
+RESULT: ALL CHECKS PASSED
+```
+
+This proves the three 2b requirements: the signup trigger plants the 12 default tags, tag rows are user-scoped via RLS, and the join table can't be used to reference another user's tag.
+
+**Default tag set** (canonical list in [`seed-tags.ts`](./seed-tags.ts)): ICT concepts (Order Block, FVG, Liquidity Sweep, Breaker, Mitigation Block), sessions (London, New York, Asia), emotions (Disciplined, FOMO, Revenge Trade, Hesitant). The `setup` category is intentionally empty — setups are user-defined strategy names.
+
+The seed fires from an `AFTER INSERT ON auth.users` trigger (`seed_default_tags()`), so it works identically for email/password, OAuth, and admin-created users, and regardless of email-confirmation settings. To add/rename a default later, edit both `db/seed-tags.ts` and the `INSERT` in `0001_tags.sql`'s seed function, then re-run the migration (it's idempotent via `ON CONFLICT DO NOTHING`).
+
 ## Day-to-day dev loop (later phases)
 
 Once the base table exists, use Drizzle for column changes:
