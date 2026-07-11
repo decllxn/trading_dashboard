@@ -32,6 +32,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# Drizzle — generated migration snapshots/meta used only for local diffing.
+# Canonical migrations live in supabase/migrations/*.sql (committed).
+/drizzle
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
