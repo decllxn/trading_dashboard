@@ -4,7 +4,9 @@ import {
   createServerClient,
   isSupabaseConfigured,
 } from '@/lib/supabase';
-import { TopBar } from './top-bar';
+import { NavRail } from '@/components/shell/nav-rail';
+import { TopBar } from '@/components/shell/top-bar';
+import { SignalStrip } from '@/components/shell/signal-strip';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,10 +45,17 @@ export default async function DashboardLayout({
     redirect('/login');
   }
 
+  // Persistent app shell: rail + (top bar + signal strip + content).
+  // The frame persists across all /dashboard/* navigation; only {children}
+  // re-renders on route change.
   return (
-    <div className="bg-base flex min-h-screen flex-col">
-      <TopBar email={user.email ?? ''} />
-      <div className="flex-1">{children}</div>
+    <div className="bg-base flex min-h-screen">
+      <NavRail />
+      <div className="flex flex-1 flex-col">
+        <TopBar email={user.email ?? ''} />
+        <SignalStrip />
+        <main className="flex-1">{children}</main>
+      </div>
     </div>
   );
 }
