@@ -167,7 +167,11 @@ export function TradesTable({ trades, tags }: TradesTableProps) {
 function TradeTableRow({ trade }: { trade: TradeRow }) {
   return (
     <tr className="border-hairline border-b transition-colors duration-150 last:border-b-0 hover:bg-surface-raised">
-      <td className="text-primary px-3 py-2.5">{trade.instrument}</td>
+      <td className="text-primary px-3 py-2.5 font-medium">
+        <Link href={`/dashboard/trades/${trade.id}`} className="hover:text-accent-signal transition-colors">
+          {trade.instrument}
+        </Link>
+      </td>
       <td className="text-secondary px-3 py-2.5">{capitalize(trade.direction)}</td>
       <td className="num px-3 py-2.5 text-right">{formatPrice(trade.entryPrice)}</td>
       <td className="num px-3 py-2.5 text-right">{formatPrice(trade.exitPrice)}</td>

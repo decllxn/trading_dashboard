@@ -8,7 +8,7 @@ import {
   parseDateTimeLocal,
   parseNumber,
 } from '@/lib/trades';
-import type { AssetClass, Direction, TradeStatus } from '@/db/schema';
+import type { AssetClass, Direction, TradeStatus, ChartAnnotation } from '@/db/schema';
 
 /**
  * Form-state shape returned to the client via useFormState. `errors` is a
@@ -224,5 +224,39 @@ export async function deleteTrade(tradeId: string): Promise<{ error?: string }> 
   const { error } = await supabase.from('trades').delete().eq('id', tradeId);
   if (error) return { error: error.message };
   revalidatePath('/dashboard/trades');
+  return {};
+}
+
+export async function saveTradeAnnotations(tradeId: string, annotations: ChartAnnotation[]): Promise<{ error?: string }> {
+  const supabase = createServerClient();
+  if (!supabase) return { error: 'Database client unavailable.' };
+  
+  const { error } = await supabase
+    .from('trades')
+    .update({ annotations: annotations as any })
+    .eq('id', tradeId);
+    
+  if (error) return { error: error.message };
+  revalidatePath(`/dashboard/trades/${tradeId}`);
+  return {};
+}
+
+export async function toggleSessionBands(enabled: boolean): Promise<{ error?: string }> {
+  const supabase = createServerClient();
+  if (!supabase) return { error: 'Database client unavailable.' };
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Not authenticated.' };
+
+  const { error } = await supabase
+    .from('user_settings')
+    .upsert({
+      user_id: user.id,
+      chart_sessions_enabled: enabled,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' });
+
+  if (error) return { error: error.message };
+  revalidatePath('/dashboard');
   return {};
 }
