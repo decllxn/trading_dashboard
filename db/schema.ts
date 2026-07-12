@@ -23,6 +23,7 @@
  *   up its join rows automatically.
  */
 import {
+  boolean,
   date,
   jsonb,
   numeric,
@@ -34,6 +35,16 @@ import {
   unique,
   uuid,
 } from 'drizzle-orm/pg-core';
+
+export type AnnotationType = 'fvg' | 'ob';
+export interface ChartAnnotation {
+  id: string;
+  type: AnnotationType;
+  time1: number;
+  price1: number;
+  time2: number;
+  price2: number;
+}
 
 /**
  * asset_class — the market a trade was executed in. Stored as a native
@@ -110,6 +121,9 @@ export const trades = pgTable('trades', {
 
   status: tradeStatusEnum('status').notNull().default('open'),
   source: tradeSourceEnum('source').notNull().default('manual'),
+
+  // User-drawn chart annotations for this trade (FVG, OB)
+  annotations: jsonb('annotations').$type<ChartAnnotation[]>().default([]),
 
   // Forward reference: Phase 2d adds the broker_connections table and this
   // becomes a real FK. Kept nullable + untyped for now so open/manual trades
@@ -328,3 +342,20 @@ export const csvMappings = pgTable(
 
 export type CsvMapping = typeof csvMappings.$inferSelect;
 export type NewCsvMapping = typeof csvMappings.$inferInsert;
+
+/**
+ * user_settings — global preferences per user.
+ */
+export const userSettings = pgTable('user_settings', {
+  userId: uuid('user_id').primaryKey().notNull(),
+  chartSessionsEnabled: boolean('chart_sessions_enabled').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type UserSettings = typeof userSettings.$inferSelect;
+export type NewUserSettings = typeof userSettings.$inferInsert;
