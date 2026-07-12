@@ -10,7 +10,8 @@
     "format": "prettier --write .",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "test": "node --test --experimental-strip-types"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",
