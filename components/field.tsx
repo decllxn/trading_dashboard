@@ -3,6 +3,7 @@ import {
   type InputHTMLAttributes,
   type LabelHTMLAttributes,
   type ReactNode,
+  type SelectHTMLAttributes,
 } from 'react';
 import { cn } from '@/lib/utils';
 
@@ -35,6 +36,23 @@ export const Input = forwardRef<
   />
 ));
 Input.displayName = 'Input';
+
+export const Select = forwardRef<
+  HTMLSelectElement,
+  SelectHTMLAttributes<HTMLSelectElement>
+>(({ className, children, ...props }, ref) => (
+  <select
+    ref={ref}
+    className={cn(
+      'num w-full appearance-none rounded-card border border-hairline bg-surface px-3 py-2 text-sm text-primary focus:border-accent-signal focus:outline-none focus:ring-1 focus:ring-accent-signal',
+      className,
+    )}
+    {...props}
+  >
+    {children}
+  </select>
+));
+Select.displayName = 'Select';
 
 interface FieldProps {
   id: string;
