@@ -297,3 +297,34 @@ export type BrokerProvider = (typeof brokerProviderEnum.enumValues)[number];
 /** 'active' | 'error' | 'disconnected'. */
 export type BrokerConnectionStatus =
   (typeof brokerConnectionStatusEnum.enumValues)[number];
+
+/**
+ * csv_mappings — one saved CSV column-mapping per (user, broker_name) for the
+ * Phase 4 import flow. `mapping` is `{ tradesField: sourceColumnHeader }`,
+ * keyed by header STRING so a saved mapping survives column reordering /
+ * relabeling between re-exports. (user_id, broker_name) is unique, so
+ * re-importing from the same broker refreshes the saved mapping in place.
+ *
+ * `trades.source = 'csv'` marks rows inserted via this flow; the mapping row
+ * is provenance, not a hard FK (a user may delete a mapping without losing
+ * imported trades).
+ */
+export const csvMappings = pgTable(
+  'csv_mappings',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull(),
+    brokerName: text('broker_name').notNull(),
+    mapping: jsonb('mapping').$type<Record<string, string>>().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [unique('csv_mappings_user_broker_uidx').on(t.userId, t.brokerName)],
+);
+
+export type CsvMapping = typeof csvMappings.$inferSelect;
+export type NewCsvMapping = typeof csvMappings.$inferInsert;
