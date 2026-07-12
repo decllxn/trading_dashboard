@@ -87,6 +87,22 @@ This proves the three 2c requirements: `journal_entries` is user-scoped via RLS,
 
 **Schema notes.** `date` is a bare `DATE` (the journal is day-granular — one entry per day). `content` is JSONB storing a Tiptap document; Phase 7a pins a concrete TS type on it. `mood` is free text for now (Phase 7c links it to the emotion tags from 2b).
 
+## Phase 2d — broker_connections
+
+Apply the broker migration the same way (SQL editor):
+
+1. Paste [`../supabase/migrations/0003_broker_connections.sql`](../supabase/migrations/0003_broker_connections.sql) → **Run**.
+2. Paste [`../supabase/verify_broker_rls.sql`](../supabase/verify_broker_rls.sql) → **Run**. Expect:
+
+```
+PASS: owner sees their own broker connection
+PASS: intruder sees only their own connection (not owner's)
+PASS: deleting connection nulled trade.broker_connection_id (trade preserved)
+RESULT: ALL CHECKS PASSED
+```
+
+This migration also wires the forward FK left dangling in `0000_trades.sql`: `trades.broker_connection_id → broker_connections(id) ON DELETE SET NULL`. Deleting a connection preserves the trade and nulls its reference (Phase 8 populates the rows). This completes Phase 2 — the full data model is now in place.
+
 ## Day-to-day dev loop (later phases)
 
 Once the base table exists, use Drizzle for column changes:
