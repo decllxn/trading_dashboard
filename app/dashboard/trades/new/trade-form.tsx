@@ -7,7 +7,7 @@ import { Field, Input, Label, Select } from '@/components/field';
 import { Segmented } from '@/components/segmented';
 import { TagPicker } from '@/components/tag-picker';
 import { SubmitButton } from '@/components/submit-button';
-import { createTrade, type TradeFormState } from '../actions';
+import { createTrade, updateTrade, type TradeFormState } from '../actions';
 import {
   ASSET_CLASS_OPTIONS,
   DIRECTION_OPTIONS,
@@ -19,52 +19,72 @@ import {
 } from '@/lib/trades';
 import type { AssetClass, Direction, Tag, TradeStatus } from '@/db/schema';
 
+/** Shape of the trade data passed in for edit mode. */
+export interface TradeInitialData {
+  id: string;
+  instrument: string;
+  assetClass: AssetClass;
+  direction: Direction;
+  status: TradeStatus;
+  entryPrice: string;
+  exitPrice: string;
+  size: string;
+  stopPrice: string;
+  targetPrice: string;
+  entryTime: string;
+  exitTime: string;
+  pnl: string;
+  tagIds: ReadonlyArray<string>;
+}
+
 interface TradeFormProps {
   tags: ReadonlyArray<Tag>;
+  /** When provided, the form operates in edit mode. */
+  initialData?: TradeInitialData;
 }
 
 /**
- * Client trade-entry form.
+ * Client trade form — shared between create and edit.
  *
- * State:
- *  - direction / status are React state (driving segmented controls and the
- *    exit-fields-optional-when-open rule). They're mirrored into the form via
- *    hidden inputs so the server action receives them even though the toggles
- *    are custom components.
- *  - selected tag ids are React state for the live chip highlighting; the
- *    checkboxes themselves also submit, so the two stay in sync via onChange.
- *  - R-multiple is derived live from entry/stop/exit + direction for a live
- *    preview; the server recomputes it authoritatively on submit (the field
- *    is never user-typed).
- *
- * Server action wiring follows the same useFormState pattern as the auth
- * forms: the action returns { errors, values, formError }, and this component
- * paints per-field errors and echoes values back on failure.
+ * In create mode, submits to `createTrade`. In edit mode, submits to
+ * `updateTrade` (bound with the trade ID). R-multiple is derived live from
+ * entry/stop/exit + direction and recomputed on submit.
  */
-export function TradeForm({ tags }: TradeFormProps) {
+export function TradeForm({ tags, initialData }: TradeFormProps) {
+  const isEdit = !!initialData;
+
+  const boundUpdate = initialData
+    ? updateTrade.bind(null, initialData.id)
+    : createTrade;
+
   const [state, formAction] = useFormState<TradeFormState, FormData>(
-    createTrade,
+    boundUpdate,
     {},
   );
 
+  // On validation failure the server echoes values back; on first render of
+  // edit mode, use the initial data instead.
   const v = state.values ?? {};
 
   const [direction, setDirection] = useState<Direction>(
-    (v.direction as Direction) || 'long',
+    (v.direction as Direction) || initialData?.direction || 'long',
   );
   const [status, setStatus] = useState<TradeStatus>(
-    (v.status as TradeStatus) || 'open',
+    (v.status as TradeStatus) || initialData?.status || 'open',
   );
 
-  // Entry/stop/exit string values for the live R preview. We read them from
-  // controlled inputs below so the preview recomputes on every keystroke
-  // without waiting for a submit.
-  const [entryPrice, setEntryPrice] = useState(v.entryPrice ?? '');
-  const [stopPrice, setStopPrice] = useState(v.stopPrice ?? '');
-  const [exitPrice, setExitPrice] = useState(v.exitPrice ?? '');
+  const [entryPrice, setEntryPrice] = useState(
+    v.entryPrice ?? initialData?.entryPrice ?? '',
+  );
+  const [stopPrice, setStopPrice] = useState(
+    v.stopPrice ?? initialData?.stopPrice ?? '',
+  );
+  const [exitPrice, setExitPrice] = useState(
+    v.exitPrice ?? initialData?.exitPrice ?? '',
+  );
 
   const [selectedTags, setSelectedTags] = useState<ReadonlyArray<string>>(
-    v.tags ? v.tags.split(',') : [],
+    v.tags ? v.tags.split(',') : (initialData?.tagIds ?? []),
   );
 
   const rPreview = useMemo(
@@ -96,7 +116,7 @@ export function TradeForm({ tags }: TradeFormProps) {
             <Input
               id="instrument"
               name="instrument"
-              defaultValue={v.instrument}
+              defaultValue={v.instrument ?? initialData?.instrument}
               required
               placeholder="AAPL"
               autoComplete="off"
@@ -106,7 +126,7 @@ export function TradeForm({ tags }: TradeFormProps) {
             <Select
               id="assetClass"
               name="assetClass"
-              defaultValue={v.assetClass}
+              defaultValue={v.assetClass ?? initialData?.assetClass}
               required
             >
               {ASSET_CLASS_OPTIONS.map((o) => (
@@ -149,7 +169,7 @@ export function TradeForm({ tags }: TradeFormProps) {
               inputMode="decimal"
               step="any"
               min="0"
-              defaultValue={v.size}
+              defaultValue={v.size ?? initialData?.size}
               required
               placeholder="100"
             />
@@ -162,7 +182,7 @@ export function TradeForm({ tags }: TradeFormProps) {
               inputMode="decimal"
               step="any"
               min="0"
-              defaultValue={v.entryPrice}
+              defaultValue={v.entryPrice ?? initialData?.entryPrice}
               required
               placeholder="0.00"
               onChange={(e) => setEntryPrice(e.target.value)}
@@ -176,7 +196,7 @@ export function TradeForm({ tags }: TradeFormProps) {
               inputMode="decimal"
               step="any"
               min="0"
-              defaultValue={v.stopPrice}
+              defaultValue={v.stopPrice ?? initialData?.stopPrice}
               placeholder="0.00"
               onChange={(e) => setStopPrice(e.target.value)}
             />
@@ -189,7 +209,7 @@ export function TradeForm({ tags }: TradeFormProps) {
               inputMode="decimal"
               step="any"
               min="0"
-              defaultValue={v.targetPrice}
+              defaultValue={v.targetPrice ?? initialData?.targetPrice}
               placeholder="0.00"
             />
           </Field>
@@ -201,7 +221,7 @@ export function TradeForm({ tags }: TradeFormProps) {
               inputMode="decimal"
               step="any"
               min="0"
-              defaultValue={v.exitPrice}
+              defaultValue={v.exitPrice ?? initialData?.exitPrice}
               required={!exitOptional}
               placeholder={exitOptional ? 'optional' : '0.00'}
               onChange={(e) => setExitPrice(e.target.value)}
@@ -234,7 +254,7 @@ export function TradeForm({ tags }: TradeFormProps) {
               id="entryTime"
               name="entryTime"
               type="datetime-local"
-              defaultValue={v.entryTime}
+              defaultValue={v.entryTime ?? initialData?.entryTime}
             />
           </Field>
           <Field id="exitTime" label="Exit time" error={state.errors?.exitTime}>
@@ -242,7 +262,7 @@ export function TradeForm({ tags }: TradeFormProps) {
               id="exitTime"
               name="exitTime"
               type="datetime-local"
-              defaultValue={v.exitTime}
+              defaultValue={v.exitTime ?? initialData?.exitTime}
               required={!exitOptional}
               placeholder={exitOptional ? 'optional' : undefined}
             />
@@ -261,7 +281,7 @@ export function TradeForm({ tags }: TradeFormProps) {
               type="number"
               inputMode="decimal"
               step="any"
-              defaultValue={v.pnl}
+              defaultValue={v.pnl ?? initialData?.pnl}
               placeholder={exitOptional ? 'optional' : '0.00'}
             />
           </Field>
@@ -291,7 +311,9 @@ export function TradeForm({ tags }: TradeFormProps) {
         >
           Cancel
         </Link>
-        <SubmitButton pendingLabel="Saving…">Save trade</SubmitButton>
+        <SubmitButton pendingLabel={isEdit ? 'Updating…' : 'Saving…'}>
+          {isEdit ? 'Update trade' : 'Save trade'}
+        </SubmitButton>
       </div>
     </form>
   );
