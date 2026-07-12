@@ -421,7 +421,8 @@ export type SkipReason =
   | 'missing-instrument'
   | 'unresolved-asset-class'
   | 'unresolved-direction'
-  | 'unresolved-status';
+  | 'unresolved-status'
+  | 'duplicate';
 
 export interface SkippedRow {
   /** 0-based index into the parsed rows array. */
@@ -589,4 +590,120 @@ function timestampValue(
   const ms = Date.parse(isoish);
   if (Number.isNaN(ms)) return null;
   return new Date(ms).toISOString();
+}
+
+// =============================================================================
+// Dedup — partition built trades against existing rows (Phase 4c).
+// =============================================================================
+//
+// Per build.md 4c: a trade is a duplicate when instrument + entry_time + size
+// match an existing row, with "a small tolerance" on size to absorb rounding
+// differences between broker exports (e.g. 100 vs 100.0000). entry_time is
+// matched exactly on the minute — brokers report the same fill at slightly
+// different seconds (09:30:00 vs 09:30:02), and minute-granularity is the
+// natural de-dup key for a journal.
+
+/**
+ * Two existing trades whose entry times differ by less than this many
+ * milliseconds are considered the same instant. 60_000ms = one minute.
+ */
+const ENTRY_TIME_TOLERANCE_MS = 60_000;
+
+/**
+ * Two sizes whose absolute difference is within this fraction of the larger
+ * one are considered equal. 0.001 (0.1%) absorbs broker rounding noise
+ * (100 vs 100.0000, 0.1 vs 0.10000) without treating genuinely different
+ * position sizes as duplicates.
+ */
+const SIZE_RELATIVE_TOLERANCE = 0.001;
+
+/**
+ * Minimal shape of an existing trade used for dedup. The server action maps
+ * Supabase rows into this camelCase form so the dedup logic stays decoupled
+ * from the wire format — same pattern as TradeRow.
+ */
+export interface ExistingTrade {
+  instrument: string;
+  size: number | null;
+  entryTime: string | null;
+}
+
+export interface DedupeResult {
+  /** Trades that passed dedup and may be inserted. */
+  newTrades: BuiltTrade[];
+  /** Built trades that matched an existing row, each with the row index. */
+  duplicates: SkippedRow[];
+}
+
+/**
+ * Partition built trades into new vs. duplicate against the user's existing
+ * rows. A built trade is a duplicate when, for ANY existing row:
+ *   - instrument matches case-insensitively, AND
+ *   - entry_time is within {@link ENTRY_TIME_TOLERANCE_MS} (or both null), AND
+ *   - size is within {@link SIZE_RELATIVE_TOLERANCE} (or both null)
+ *
+ * Trades with null entryTime AND null size still dedup on instrument alone if
+ * the existing row also has both null — otherwise two such trades could never
+ * be distinguished and would silently stack. When in doubt (partial info),
+ * we prefer NOT to dedup so the user sees the row in the "new" set and can
+ * decide. Returns the original BuiltTrade objects (not copies) for the new
+ * set, so the server action can insert them directly.
+ */
+export function dedupeTrades(
+  built: ReadonlyArray<BuiltTrade>,
+  existing: ReadonlyArray<ExistingTrade>,
+): DedupeResult {
+  const newTrades: BuiltTrade[] = [];
+  const duplicates: SkippedRow[] = [];
+
+  built.forEach((trade, index) => {
+    const dupeIndex = existing.findIndex((e) => isDuplicate(trade, e));
+    if (dupeIndex >= 0) {
+      duplicates.push({
+        rowIndex: index,
+        reason: 'duplicate',
+        detail: `${trade.instrument} already imported`,
+      });
+    } else {
+      newTrades.push(trade);
+    }
+  });
+
+  return { newTrades, duplicates };
+}
+
+/**
+ * The duplicate test. Instrument is always required. entryTime and size each
+ * match if both sides are present and within tolerance, OR both sides are
+ * null. A present-vs-null mismatch on either field means we can't be sure
+ * it's the same trade, so we return false (treat as new).
+ */
+function isDuplicate(trade: BuiltTrade, existing: ExistingTrade): boolean {
+  if (trade.instrument.toLowerCase() !== existing.instrument.toLowerCase()) {
+    return false;
+  }
+
+  const timeMatch = timesMatch(trade.entryTime, existing.entryTime);
+  if (!timeMatch) return false;
+
+  return sizesMatch(trade.size, existing.size);
+}
+
+/** True when two ISO timestamps are within the tolerance window (or both null). */
+function timesMatch(a: string | null, b: string | null): boolean {
+  if (a == null && b == null) return true;
+  if (a == null || b == null) return false;
+  const diff = Math.abs(Date.parse(a) - Date.parse(b));
+  if (Number.isNaN(diff)) return false;
+  return diff <= ENTRY_TIME_TOLERANCE_MS;
+}
+
+/** True when two sizes agree within relative tolerance (or both null). */
+function sizesMatch(a: number | null, b: number | null): boolean {
+  if (a == null && b == null) return true;
+  if (a == null || b == null) return false;
+  if (a === b) return true;
+  const larger = Math.max(Math.abs(a), Math.abs(b));
+  if (larger === 0) return a === b; // both zero → match (caught above), be safe
+  return Math.abs(a - b) / larger <= SIZE_RELATIVE_TOLERANCE;
 }

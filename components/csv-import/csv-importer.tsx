@@ -15,10 +15,18 @@ import {
   type ColumnMapping,
   type ImportDefaults,
 } from '@/lib/csv-mapping';
-import { importCsvTrades, type ImportResult } from '@/app/dashboard/trades/import/actions';
-import { CsvDropzone } from './csv-dropzone';
+import {
+  commitImport,
+  extractPdfTrades,
+  previewImport,
+  type CommitResult,
+  type PreviewResult,
+} from '@/app/dashboard/trades/import/actions';
+import { ImportDropzone } from './csv-dropzone';
+import type { ImportFileKind } from './csv-dropzone';
 import { CsvPreviewTable } from './csv-preview-table';
 import { ColumnMapper } from './column-mapper';
+import { ImportReview } from './import-review';
 
 /** A previously-saved broker mapping passed from the server for auto-apply. */
 export interface SavedBrokerMapping {
@@ -29,64 +37,87 @@ export interface SavedBrokerMapping {
 interface CsvImporterProps {
   /** All of the user's saved mappings, for broker-name autocomplete. */
   savedMappings: ReadonlyArray<SavedBrokerMapping>;
+  /** True when PDF upload should be offered (Anthropic key configured). */
+  acceptPdf?: boolean;
+}
+
+/** Shared fields across the parsed / confirming / importing states. */
+interface ParsedContext {
+  fileName: string;
+  fileSize: number;
+  parsed: ParsedCsv;
+  mapping: ColumnMapping;
+  defaults: ImportDefaults;
+  brokerName: string;
 }
 
 type Status =
   | { kind: 'idle' }
   | { kind: 'parsing'; fileName: string }
-  | {
-      kind: 'parsed';
-      fileName: string;
-      fileSize: number;
-      parsed: ParsedCsv;
-      mapping: ColumnMapping;
-      defaults: ImportDefaults;
-      brokerName: string;
-    }
-  | {
-      kind: 'importing';
-      fileName: string;
-      fileSize: number;
-      parsed: ParsedCsv;
-      mapping: ColumnMapping;
-      defaults: ImportDefaults;
-      brokerName: string;
-    }
-  | { kind: 'done'; fileName: string; result: ImportResult }
+  | ({ kind: 'parsed' } & ParsedContext)
+  | ({ kind: 'confirming' } & ParsedContext & { preview: PreviewResult })
+  | ({ kind: 'importing' } & ParsedContext)
+  | { kind: 'done'; fileName: string; result: CommitResult }
   | { kind: 'error'; fileName: string; message: string };
 
 /**
- * Orchestrates the full CSV import flow (Phase 4a + 4b).
+ * Orchestrates the full CSV import flow (Phase 4a preview + 4b mapping + 4c
+ * dedup review).
  *
- * State machine: idle → parsing → parsed (preview + mapping) → importing →
- * done | error. The user moves from preview to mapping by confirming, edits
- * the auto-suggested mapping, names the broker, and commits. On commit the
- * server action builds + bulk-inserts the trades and upserts the (user,
- * broker) mapping; re-importing the same broker auto-applies that mapping via
- * the {@link SavedBrokerMapping} preload.
+ * State machine: idle → parsing → parsed (preview + mapping) → confirming
+ * (dedup summary, review skipped rows) → importing → done | error.
+ *
+ * On "Import", the server runs `previewImport` (build + dedup against existing
+ * trades, no writes) and shows the "N new / M duplicates / K skipped" summary
+ * with a reviewable skipped-row list. The user confirms, then `commitImport`
+ * re-derives the new set server-side and inserts only those rows. Dedup is
+ * re-derived on commit so a malicious payload can't bypass it, and so trades
+ * added between preview and commit are accounted for.
  */
-export function CsvImporter({ savedMappings }: CsvImporterProps) {
+export function CsvImporter({ savedMappings, acceptPdf }: CsvImporterProps) {
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
 
-  async function handleFile(file: File) {
+  /**
+   * Route by file kind. CSVs parse client-side (Papaparse); PDFs are sent to
+   * the `extractPdfTrades` server action, which pulls text server-side and
+   * asks Claude for a structured `{ headers, rows }` response. Both paths
+   * converge on the same `parsed` state, so the mapping / preview / dedup
+   * flow that follows is identical regardless of source.
+   */
+  async function handleFile(file: File, kind: ImportFileKind) {
     setStatus({ kind: 'parsing', fileName: file.name });
     try {
-      const text = await readFileAsText(file);
-      const result = parseCsvText(text);
-      if (!result.ok) {
-        setStatus({
-          kind: 'error',
-          fileName: file.name,
-          message: result.message,
-        });
-        return;
+      let parsed: ParsedCsv;
+      if (kind === 'pdf') {
+        const result = await extractPdfTrades(file);
+        if (!result.ok || !result.parsed) {
+          setStatus({
+            kind: 'error',
+            fileName: file.name,
+            message: result.error ?? 'Could not extract trades from the PDF.',
+          });
+          return;
+        }
+        parsed = result.parsed;
+      } else {
+        const text = await readFileAsText(file);
+        const result = parseCsvText(text);
+        if (!result.ok) {
+          setStatus({
+            kind: 'error',
+            fileName: file.name,
+            message: result.message,
+          });
+          return;
+        }
+        parsed = result;
       }
       setStatus({
         kind: 'parsed',
         fileName: file.name,
         fileSize: file.size,
-        parsed: result,
-        mapping: suggestMapping(result.headers),
+        parsed,
+        mapping: suggestMapping(parsed.headers),
         defaults: DEFAULT_IMPORT_DEFAULTS,
         brokerName: '',
       });
@@ -105,44 +136,86 @@ export function CsvImporter({ savedMappings }: CsvImporterProps) {
   }
 
   function applyBrokerMapping(brokerName: string) {
-    if (status.kind !== 'parsed') return;
-    const saved = savedMappings.find(
-      (m) => m.brokerName.toLowerCase() === brokerName.trim().toLowerCase(),
-    );
-    if (!saved) return;
-    setStatus({
-      ...status,
-      brokerName,
-      mapping: resolveSavedMapping(saved.mapping, status.parsed.headers),
+    setStatus((prev) => {
+      if (prev.kind !== 'parsed') return prev;
+      const saved = savedMappings.find(
+        (m) => m.brokerName.toLowerCase() === brokerName.trim().toLowerCase(),
+      );
+      if (!saved) return prev;
+      return {
+        ...prev,
+        brokerName,
+        mapping: resolveSavedMapping(saved.mapping, prev.parsed.headers),
+      };
     });
   }
 
-  async function commit() {
+  async function runPreview() {
     if (status.kind !== 'parsed') return;
-    const { fileName, parsed, mapping, defaults, brokerName } = status;
-    if (mapping.instrument == null) return; // required — guarded in UI
-    setStatus({
-      kind: 'importing',
-      fileName,
+    if (status.mapping.instrument == null) return; // required — guarded in UI
+    const ctx: ParsedContext = {
+      fileName: status.fileName,
       fileSize: status.fileSize,
-      parsed,
-      mapping,
-      defaults,
-      brokerName,
+      parsed: status.parsed,
+      mapping: status.mapping,
+      defaults: status.defaults,
+      brokerName: status.brokerName,
+    };
+    setStatus({ kind: 'importing', ...ctx });
+    const preview = await previewImport({
+      brokerName: ctx.brokerName,
+      parsed: ctx.parsed,
+      mapping: ctx.mapping,
+      defaults: ctx.defaults,
     });
-    const result = await importCsvTrades({
-      brokerName,
-      parsed,
-      mapping,
-      defaults,
-    });
-    setStatus({ kind: 'done', fileName, result });
+    setStatus({ kind: 'confirming', ...ctx, preview });
   }
 
+  async function confirmCommit() {
+    if (status.kind !== 'confirming') return;
+    const ctx: ParsedContext = {
+      fileName: status.fileName,
+      fileSize: status.fileSize,
+      parsed: status.parsed,
+      mapping: status.mapping,
+      defaults: status.defaults,
+      brokerName: status.brokerName,
+    };
+    setStatus({ kind: 'importing', ...ctx });
+    const result = await commitImport({
+      brokerName: ctx.brokerName,
+      parsed: ctx.parsed,
+      mapping: ctx.mapping,
+      defaults: ctx.defaults,
+    });
+    setStatus({ kind: 'done', fileName: ctx.fileName, result });
+  }
+
+  function backToMapping() {
+    setStatus((prev) =>
+      prev.kind === 'confirming'
+        ? {
+            kind: 'parsed',
+            fileName: prev.fileName,
+            fileSize: prev.fileSize,
+            parsed: prev.parsed,
+            mapping: prev.mapping,
+            defaults: prev.defaults,
+            brokerName: prev.brokerName,
+          }
+        : prev,
+    );
+  }
+
+  // idle / parsing
   if (status.kind === 'idle' || status.kind === 'parsing') {
     return (
       <div className="space-y-4">
-        <CsvDropzone onFile={handleFile} disabled={status.kind === 'parsing'} />
+        <ImportDropzone
+          onFile={handleFile}
+          disabled={status.kind === 'parsing'}
+          acceptPdf={acceptPdf}
+        />
         {status.kind === 'parsing' ? (
           <p className="text-secondary flex items-center gap-2 text-xs">
             <RefreshCw
@@ -173,42 +246,37 @@ export function CsvImporter({ savedMappings }: CsvImporterProps) {
 
   if (status.kind === 'done') {
     return (
-      <DoneNotice fileName={status.fileName} result={status.result} onReset={reset} />
+      <DoneNotice
+        fileName={status.fileName}
+        result={status.result}
+        onReset={reset}
+      />
     );
   }
 
-  const importing = status.kind === 'importing';
-  const s = importing
-    ? {
-        fileName: status.fileName,
-        fileSize: status.fileSize,
-        parsed: status.parsed,
-        mapping: status.mapping,
-        defaults: status.defaults,
-        brokerName: status.brokerName,
-      }
-    : status;
+  if (status.kind === 'confirming') {
+    return (
+      <ImportReview
+        fileName={status.fileName}
+        preview={status.preview}
+        onBack={backToMapping}
+        onConfirm={confirmCommit}
+      />
+    );
+  }
 
-  const canCommit = s.mapping.instrument != null && !importing;
+  // parsed or importing — both render the mapping editor; importing disables it.
+  const importing = status.kind === 'importing';
+  const s = status;
 
   return (
     <div className="space-y-6">
-      <div className="border-hairline bg-surface flex items-center justify-between gap-3 rounded-card border px-4 py-3">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <FileText
-            size={16}
-            strokeWidth={1.75}
-            className="text-accent-signal shrink-0"
-          />
-          <div className="min-w-0">
-            <p className="text-primary truncate text-sm">{s.fileName}</p>
-            <p className="num text-tertiary text-xs">
-              {formatFileSize(s.fileSize)}
-            </p>
-          </div>
-        </div>
-        <ResetButton onClick={reset} disabled={importing} />
-      </div>
+      <FileHeader
+        fileName={s.fileName}
+        fileSize={s.fileSize}
+        onReset={reset}
+        resetDisabled={importing}
+      />
 
       <CsvPreviewTable parsed={s.parsed} />
 
@@ -308,8 +376,8 @@ export function CsvImporter({ savedMappings }: CsvImporterProps) {
           </button>
           <button
             type="button"
-            onClick={commit}
-            disabled={!canCommit}
+            onClick={runPreview}
+            disabled={s.mapping.instrument == null || importing}
             className="bg-accent-signal text-base inline-flex items-center gap-1.5 rounded-card px-4 py-2 text-sm transition-colors duration-150 hover:bg-accent-signal/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {importing ? (
@@ -319,10 +387,10 @@ export function CsvImporter({ savedMappings }: CsvImporterProps) {
                   strokeWidth={2}
                   className="animate-spin"
                 />
-                Importing…
+                Checking…
               </>
             ) : (
-              <>Import {s.parsed.rowCount} row{s.parsed.rowCount === 1 ? '' : 's'}</>
+              <>Review import</>
             )}
           </button>
         </div>
@@ -331,7 +399,42 @@ export function CsvImporter({ savedMappings }: CsvImporterProps) {
   );
 }
 
-function ErrorNotice({ fileName, message }: { fileName: string; message: string }) {
+function FileHeader({
+  fileName,
+  fileSize,
+  onReset,
+  resetDisabled,
+}: {
+  fileName: string;
+  fileSize: number;
+  onReset: () => void;
+  resetDisabled?: boolean;
+}) {
+  return (
+    <div className="border-hairline bg-surface flex items-center justify-between gap-3 rounded-card border px-4 py-3">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <FileText
+          size={16}
+          strokeWidth={1.75}
+          className="text-accent-signal shrink-0"
+        />
+        <div className="min-w-0">
+          <p className="text-primary truncate text-sm">{fileName}</p>
+          <p className="num text-tertiary text-xs">{formatFileSize(fileSize)}</p>
+        </div>
+      </div>
+      <ResetButton onClick={onReset} disabled={resetDisabled} />
+    </div>
+  );
+}
+
+function ErrorNotice({
+  fileName,
+  message,
+}: {
+  fileName: string;
+  message: string;
+}) {
   return (
     <div className="border-hairline bg-surface rounded-card border px-4 py-3">
       <div className="flex items-start gap-2">
@@ -355,7 +458,7 @@ function DoneNotice({
   onReset,
 }: {
   fileName: string;
-  result: ImportResult;
+  result: CommitResult;
   onReset: () => void;
 }) {
   return (
@@ -371,11 +474,13 @@ function DoneNotice({
             <p className="text-primary text-sm">
               Imported <span className="num text-gain">{result.inserted}</span>{' '}
               trade{result.inserted === 1 ? '' : 's'} from {fileName}
-              {result.skipped > 0 ? (
+              {result.duplicatesSkipped > 0 ? (
                 <>
                   {' — '}
-                  <span className="num text-loss">{result.skipped}</span>{' '}
-                  row{result.skipped === 1 ? '' : 's'} skipped
+                  <span className="num text-loss">
+                    {result.duplicatesSkipped}
+                  </span>{' '}
+                  duplicate{result.duplicatesSkipped === 1 ? '' : 's'} skipped
                 </>
               ) : null}
               {result.mappingSaved ? (
@@ -384,21 +489,6 @@ function DoneNotice({
             </p>
             {result.error ? (
               <p className="text-loss text-xs">{result.error}</p>
-            ) : null}
-            {result.skipSample.length > 0 ? (
-              <div className="border-hairline mt-2 rounded-card border px-3 py-2">
-                <p className="text-tertiary mb-1 text-[10px] uppercase tracking-wide">
-                  Sample skipped rows
-                </p>
-                <ul className="space-y-0.5">
-                  {result.skipSample.map((s, i) => (
-                    <li key={i} className="text-secondary text-xs">
-                      <span className="num">row {s.rowIndex + 1}</span> — {s.reason}
-                      {s.detail ? `: ${s.detail}` : ''}
-                    </li>
-                  ))}
-                </ul>
-              </div>
             ) : null}
           </div>
         </div>
