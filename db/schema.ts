@@ -1,9 +1,10 @@
 /**
  * Drizzle schema — single source of truth for the Postgres tables.
  *
- * Phases 2a (trades) and 2b (tags + trade_tags) live here. Later phases (2c
- * journal_entries, 2d broker_connections) append to this file; do not split
- * schemas across modules — Drizzle reads the whole `db/schema.ts` as one graph.
+ * Phases 2a (trades), 2b (tags + trade_tags), and 2c (journal_entries +
+ * journal_trade_links) live here. Later phases (2d broker_connections) append
+ * to this file; do not split schemas across modules — Drizzle reads the whole
+ * `db/schema.ts` as one graph.
  *
  * Conventions enforced here:
  * - Money/price/size columns are `numeric(p, s)` (decimal), never `real`/`double
@@ -22,12 +23,15 @@
  *   up its join rows automatically.
  */
 import {
+  date,
+  jsonb,
   numeric,
   pgEnum,
   pgTable,
   primaryKey,
   text,
   timestamp,
+  unique,
   uuid,
 } from 'drizzle-orm/pg-core';
 
@@ -183,3 +187,55 @@ export type NewTag = typeof tags.$inferInsert;
 export type TagCategory = (typeof tagCategoryEnum.enumValues)[number];
 export type TradeTag = typeof tradeTags.$inferSelect;
 export type NewTradeTag = typeof tradeTags.$inferInsert;
+
+/**
+ * journal_entries — one rich-text note per calendar day, authored in Tiptap
+ * (Phase 7a). `content` stores the Tiptap document as JSONB; `date` is a bare
+ * date (no time/tz) because the journal is a daily journal — one entry per day.
+ * The (user_id, date) unique constraint enforces "one entry per day per user".
+ *
+ * `mood` is a free-text label (e.g. an emotion-tag name from the 2b seed). It's
+ * nullable so an entry need not declare a mood. Phase 7c formalizes the link to
+ * the emotion tags.
+ */
+export const journalEntries = pgTable(
+  'journal_entries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull(),
+    // Bare date — the journal is day-granular. Stored as YYYY-MM-DD.
+    date: date('date').notNull(),
+    // Tiptap JSON document. Typed as `unknown` until Phase 7a pins the
+    // editor's concrete TiptapDoc type here via `$type<TiptapDoc>()`.
+    content: jsonb('content'),
+    // Free-text mood label; later phases may constrain to emotion-tag names.
+    mood: text('mood'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [unique('journal_entries_user_date_uidx').on(t.userId, t.date)],
+);
+
+/**
+ * journal_trade_links — many-to-many between journal entries and trades, so a
+ * note can reference specific trades. Composite PK on (journal_entry_id,
+ * trade_id) prevents linking the same trade twice. Both FKs CASCADE.
+ */
+export const journalTradeLinks = pgTable(
+  'journal_trade_links',
+  {
+    journalEntryId: uuid('journal_entry_id')
+      .notNull()
+      .references(() => journalEntries.id, { onDelete: 'cascade' }),
+    tradeId: uuid('trade_id')
+      .notNull()
+      .references(() => trades.id, { onDelete: 'cascade' }),
+  },
+  (t) => [primaryKey({ columns: [t.journalEntryId, t.tradeId] })],
+);
+
+export type JournalEntry = typeof journalEntries.$inferSelect;
+export type NewJournalEntry = typeof journalEntries.$inferInsert;
+export type JournalTradeLink = typeof journalTradeLinks.$inferSelect;
+export type NewJournalTradeLink = typeof journalTradeLinks.$inferInsert;

@@ -68,6 +68,25 @@ This proves the three 2b requirements: the signup trigger plants the 12 default 
 
 The seed fires from an `AFTER INSERT ON auth.users` trigger (`seed_default_tags()`), so it works identically for email/password, OAuth, and admin-created users, and regardless of email-confirmation settings. To add/rename a default later, edit both `db/seed-tags.ts` and the `INSERT` in `0001_tags.sql`'s seed function, then re-run the migration (it's idempotent via `ON CONFLICT DO NOTHING`).
 
+## Phase 2c — journal_entries + journal_trade_links
+
+Apply the journal migration the same way (SQL editor):
+
+1. Paste [`../supabase/migrations/0002_journal.sql`](../supabase/migrations/0002_journal.sql) → **Run**.
+2. Paste [`../supabase/verify_journal_rls.sql`](../supabase/verify_journal_rls.sql) → **Run**. Expect:
+
+```
+PASS: owner sees their own journal entry
+PASS: intruder sees none of the owner's entries
+PASS: duplicate same-day entry rejected (one entry/day/user)
+PASS: cannot link own entry to another user's trade
+RESULT: ALL CHECKS PASSED
+```
+
+This proves the three 2c requirements: `journal_entries` is user-scoped via RLS, the one-entry-per-day-per-user constraint holds, and `journal_trade_links` can't bridge a user's entry to another user's trade.
+
+**Schema notes.** `date` is a bare `DATE` (the journal is day-granular — one entry per day). `content` is JSONB storing a Tiptap document; Phase 7a pins a concrete TS type on it. `mood` is free text for now (Phase 7c links it to the emotion tags from 2b).
+
 ## Day-to-day dev loop (later phases)
 
 Once the base table exists, use Drizzle for column changes:
