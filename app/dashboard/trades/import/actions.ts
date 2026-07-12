@@ -5,61 +5,151 @@ import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { computeRMultiple } from '@/lib/trades';
 import {
   buildTradesFromCsv,
+  dedupeTrades,
   type ColumnMapping,
+  type ExistingTrade,
   type ImportDefaults,
+  type SkippedRow,
 } from '@/lib/csv-mapping';
 import type { ParsedCsv } from '@/lib/csv';
+import {
+  extractPdfText,
+  extractTradesFromText,
+  isAnthropicConfigured,
+} from '@/lib/pdf-extract';
 import type { Direction } from '@/db/schema';
 
 /**
- * Payload sent from the client mapping UI. The parsed CSV travels back over
- * the wire because the server action is the trust boundary: it re-validates
- * the build (rows can be skipped) and owns the insert. Sending only the built
- * trades would let a malicious client bypass skip rules; sending the parsed
- * grid + mapping means the server reconstructs the build from scratch.
+ * Import payload shared by preview + commit. The parsed CSV travels back over
+ * the wire because the server action is the trust boundary: it re-runs the
+ * build + dedup from scratch, so a tampered client can't bypass skip/dedup
+ * rules by sending pre-built trades. Sending only the built trades would let a
+ * malicious client hide duplicates.
  */
-export interface ImportCsvPayload {
+export interface ImportPayload {
   brokerName: string;
   parsed: ParsedCsv;
   mapping: ColumnMapping;
   defaults: ImportDefaults;
 }
 
-export interface ImportResult {
-  inserted: number;
-  skipped: number;
-  /** First few skip reasons, for the inline summary. */
-  skipSample: ReadonlyArray<{ rowIndex: number; reason: string; detail: string }>;
-  /** True when a saved mapping was written/refreshed for this broker. */
-  mappingSaved: boolean;
+/** One built trade, ready to insert, in the wire snake_case shape. */
+interface InsertRow {
+  user_id: string;
+  instrument: string;
+  asset_class: string;
+  direction: Direction;
+  status: string;
+  source: 'csv';
+  entry_price: string | null;
+  exit_price: string | null;
+  size: string | null;
+  stop_price: string | null;
+  target_price: string | null;
+  entry_time: string | null;
+  exit_time: string | null;
+  pnl: string | null;
+  r_multiple: string | null;
+}
+
+/**
+ * Preview result — the "N new, M duplicates skipped, K rows skipped" summary
+ * the user sees BEFORE committing. No rows are written. The client shows the
+ * new count and a reviewable list of every skipped row (duplicates included)
+ * so the user can confirm before the irreversible insert.
+ */
+export interface PreviewResult {
+  /** Trades that would be inserted on commit. */
+  newCount: number;
+  /** Built trades that matched an existing row. */
+  duplicateCount: number;
+  /** Rows that failed build validation (bad enum, missing instrument). */
+  skippedCount: number;
+  /** Every skipped row — both build failures and duplicates — for review. */
+  skipped: SkippedRow[];
   error?: string;
 }
 
 /**
- * Import a parsed + mapped CSV: build typed trade rows, bulk-insert them with
- * `source: 'csv'`, and upsert the (user, broker) mapping so the next import
- * from the same broker auto-applies. Dedup (4c) is not yet applied — re-
- * importing the same file will create duplicates; that's the explicit next
- * phase.
- *
- * Returns a structured result instead of redirecting so the UI can show the
- * "N imported / M skipped" summary inline.
+ * The result of a committed import. `inserted` is the actual number of rows
+ * written (may differ from the preview's newCount only if existing trades
+ * changed between preview and commit — re-derived server-side).
  */
-export async function importCsvTrades(
-  payload: ImportCsvPayload,
-): Promise<ImportResult> {
+export interface CommitResult {
+  inserted: number;
+  duplicatesSkipped: number;
+  mappingSaved: boolean;
+  error?: string;
+}
+
+// =============================================================================
+// Existing-trade read (dedup reference set).
+// =============================================================================
+
+/** Raw shape of a Supabase trade row used for dedup. snake_case. */
+interface RawExistingTrade {
+  instrument: string;
+  size: string | null;
+  entry_time: string | null;
+}
+
+/**
+ * Fetch the user's existing trades projected down to the dedup key (instrument,
+ * size, entry_time). These are the rows new imports are checked against. We
+ * select only the three dedup columns to keep the payload small — a user with
+ * thousands of trades doesn't need every column shipped for dedup.
+ *
+ * Decimal columns come back as strings; we coerce to number | null here so
+ * `dedupeTrades` receives a clean shape.
+ */
+async function listExistingTrades(
+  userId: string,
+): Promise<{ existing: ExistingTrade[]; error?: string }> {
+  const supabase = createServerClient();
+  if (!supabase) return { existing: [], error: 'Database client unavailable.' };
+  const { data, error } = await supabase
+    .from('trades')
+    .select('instrument, size, entry_time')
+    .eq('user_id', userId);
+  if (error) return { existing: [], error: error.message };
+  const existing = ((data ?? []) as RawExistingTrade[]).map((t) => ({
+    instrument: t.instrument,
+    size: toNumber(t.size),
+    entryTime: t.entry_time,
+  }));
+  return { existing };
+}
+
+/** Postgres numeric → number | null. Safe at retail-trade magnitudes. */
+function toNumber(value: string | null): number | null {
+  if (value == null) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+// =============================================================================
+// Preview — build + dedup, no writes.
+// =============================================================================
+
+/**
+ * Preview an import: build typed trades from the parsed grid, dedup against
+ * the user's existing trades, and return the summary. No rows are inserted.
+ * The user reviews this summary (new count, every skipped row + reason) before
+ * the `commitImport` action runs.
+ */
+export async function previewImport(
+  payload: ImportPayload,
+): Promise<PreviewResult> {
   if (!isSupabaseConfigured()) {
-    return { inserted: 0, skipped: 0, skipSample: [], mappingSaved: false, error: 'Supabase is not configured.' };
+    return emptyPreview('Supabase is not configured.');
   }
   const supabase = createServerClient();
-  if (!supabase) {
-    return { inserted: 0, skipped: 0, skipSample: [], mappingSaved: false, error: 'Database client unavailable.' };
-  }
+  if (!supabase) return emptyPreview('Database client unavailable.');
 
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    return { inserted: 0, skipped: 0, skipSample: [], mappingSaved: false, error: 'You must be signed in to import trades.' };
-  }
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return emptyPreview('You must be signed in to import trades.');
 
   const { trades, skipped } = buildTradesFromCsv(
     payload.parsed,
@@ -67,8 +157,77 @@ export async function importCsvTrades(
     payload.defaults,
   );
 
-  if (trades.length > 0) {
-    const rows = trades.map((t) => ({
+  const { existing, error } = await listExistingTrades(user.id);
+  if (error) {
+    return {
+      newCount: 0,
+      duplicateCount: 0,
+      skippedCount: skipped.length,
+      skipped,
+      error,
+    };
+  }
+
+  const { newTrades, duplicates } = dedupeTrades(trades, existing);
+  return {
+    newCount: newTrades.length,
+    duplicateCount: duplicates.length,
+    skippedCount: skipped.length,
+    skipped: [...skipped, ...duplicates],
+  };
+}
+
+function emptyPreview(message: string): PreviewResult {
+  return {
+    newCount: 0,
+    duplicateCount: 0,
+    skippedCount: 0,
+    skipped: [],
+    error: message,
+  };
+}
+
+// =============================================================================
+// Commit — insert the de-duplicated new trades + save the mapping.
+// =============================================================================
+
+/**
+ * Commit an import: re-run build + dedup (the payload is the trust boundary —
+ * the server doesn't trust a client-sent "which rows are new" list), insert
+ * only the new trades with `source: 'csv'`, and upsert the (user, broker)
+ * mapping. Returns the actual inserted count so the UI can confirm.
+ *
+ * Dedup is re-derived here, not carried over from the preview, so trades
+ * inserted between preview and commit are accounted for (and a tampered
+ * payload can't sneak in duplicates by claiming everything is new).
+ */
+export async function commitImport(
+  payload: ImportPayload,
+): Promise<CommitResult> {
+  if (!isSupabaseConfigured()) {
+    return { inserted: 0, duplicatesSkipped: 0, mappingSaved: false, error: 'Supabase is not configured.' };
+  }
+  const supabase = createServerClient();
+  if (!supabase) {
+    return { inserted: 0, duplicatesSkipped: 0, mappingSaved: false, error: 'Database client unavailable.' };
+  }
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { inserted: 0, duplicatesSkipped: 0, mappingSaved: false, error: 'You must be signed in to import trades.' };
+  }
+
+  const { trades } = buildTradesFromCsv(
+    payload.parsed,
+    payload.mapping,
+    payload.defaults,
+  );
+  const { existing } = await listExistingTrades(user.id);
+  const { newTrades, duplicates } = dedupeTrades(trades, existing);
+
+  if (newTrades.length > 0) {
+    const rows: InsertRow[] = newTrades.map((t) => ({
       user_id: user.id,
       instrument: t.instrument,
       asset_class: t.assetClass,
@@ -89,21 +248,19 @@ export async function importCsvTrades(
     const { error: insertError } = await supabase
       .from('trades')
       .insert(rows);
-
     if (insertError) {
       return {
         inserted: 0,
-        skipped: skipped.length,
-        skipSample: sample(skipped),
+        duplicatesSkipped: duplicates.length,
         mappingSaved: false,
         error: insertError.message,
       };
     }
   }
 
-  // Persist the (user, broker) mapping so re-imports auto-apply. ON CONFLICT
-  // (user_id, broker_name) DO UPDATE is what makes a re-import refresh the
-  // saved mapping in place instead of stacking duplicate rows.
+  // Upsert the (user, broker) mapping. ON CONFLICT (user_id, broker_name)
+  // DO UPDATE is what makes a re-import refresh the saved mapping in place
+  // instead of stacking duplicate rows.
   let mappingSaved = false;
   const trimmedBroker = payload.brokerName.trim();
   if (trimmedBroker !== '') {
@@ -123,9 +280,8 @@ export async function importCsvTrades(
   revalidatePath('/dashboard/trades');
 
   return {
-    inserted: trades.length,
-    skipped: skipped.length,
-    skipSample: sample(skipped),
+    inserted: newTrades.length,
+    duplicatesSkipped: duplicates.length,
     mappingSaved,
   };
 }
@@ -136,7 +292,7 @@ function numOrNull(value: number | null): string | null {
 }
 
 /**
- * Recompute R from the built row. The CSV source may have shipped its own R,
+ * Recompute R from the built row. The source data may have shipped its own R,
  * but we ignore it and compute from entry/stop/exit + direction so the value
  * is consistent with the manual trade entry path.
  */
@@ -146,15 +302,94 @@ function rMultipleOrNull(t: {
   exitPrice: number | null;
   direction: Direction;
 }): string | null {
-  const r = computeRMultiple(t.entryPrice, t.stopPrice, t.exitPrice, t.direction);
+  const r = computeRMultiple(
+    t.entryPrice,
+    t.stopPrice,
+    t.exitPrice,
+    t.direction,
+  );
   return r == null ? null : String(r);
 }
 
-/** First few skip rows for the inline summary (don't ship the whole list). */
-function sample(
-  skipped: ReadonlyArray<{ rowIndex: number; reason: string; detail: string }>,
-): ReadonlyArray<{ rowIndex: number; reason: string; detail: string }> {
-  return skipped.slice(0, 5);
+// =============================================================================
+// PDF extraction (Phase 4d) — server-side only.
+// =============================================================================
+
+/**
+ * Result of extracting trade rows from a PDF broker statement. On success,
+ * `parsed` is the same `ParsedCsv` shape the CSV importer produces, so the
+ * downstream mapping / preview / dedup flow is reused unchanged.
+ */
+export interface PdfExtractActionResult {
+  ok: boolean;
+  parsed?: ParsedCsv;
+  error?: string;
+}
+
+/**
+ * Extract trades from a PDF broker statement: pdf-parse pulls the text,
+ * Claude (structured output) returns headers + rows. Auth-gated so a signed-in
+ * session is required even though no DB row is read or written here — broker
+ * statements are sensitive, and this guards the Anthropic call behind login.
+ *
+ * The 5 MB ceiling matches what the manual-entry forms accept for attachments
+ * and keeps the request well under Anthropic's per-request text limits once
+ * pdf-parse flattens it. Statements above this are rejected with a clear
+ * message rather than failing mid-extraction.
+ */
+const PDF_MAX_BYTES = 5 * 1024 * 1024;
+
+export async function extractPdfTrades(
+  file: File,
+): Promise<PdfExtractActionResult> {
+  if (!isAnthropicConfigured()) {
+    return { ok: false, error: 'Anthropic API key is not configured.' };
+  }
+  if (!isSupabaseConfigured()) {
+    return { ok: false, error: 'Supabase is not configured.' };
+  }
+  const supabase = createServerClient();
+  if (!supabase) return { ok: false, error: 'Database client unavailable.' };
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'You must be signed in to import trades.' };
+
+  if (file.size > PDF_MAX_BYTES) {
+    return {
+      ok: false,
+      error: `PDF is ${(file.size / (1024 * 1024)).toFixed(1)} MB; the limit is 5.0 MB.`,
+    };
+  }
+
+  let buffer: Buffer;
+  try {
+    buffer = Buffer.from(await file.arrayBuffer());
+  } catch {
+    return { ok: false, error: 'Could not read the PDF file.' };
+  }
+
+  let text: string;
+  try {
+    text = await extractPdfText(buffer);
+  } catch (err) {
+    return {
+      ok: false,
+      error:
+        err instanceof Error
+          ? `PDF text extraction failed: ${err.message}`
+          : 'PDF text extraction failed.',
+    };
+  }
+
+  const result = await extractTradesFromText(text);
+  if (!result.ok) {
+    return { ok: false, error: result.message };
+  }
+  // Mark the source so saved mappings know this came from a PDF. We don't
+  // persist the source on ParsedCsv itself (it's a parse shape); the mapping
+  // is saved under whatever broker name the user enters, same as CSV.
+  return { ok: true, parsed: result };
 }
 
 // =============================================================================
@@ -177,7 +412,9 @@ export async function listBrokerMappings(): Promise<BrokerMappingSummary[]> {
   const supabase = createServerClient();
   if (!supabase) return [];
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return [];
 
   const { data } = await supabase
@@ -207,7 +444,9 @@ export async function getBrokerMapping(
   if (!isSupabaseConfigured()) return null;
   const supabase = createServerClient();
   if (!supabase) return null;
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return null;
 
   const { data } = await supabase
