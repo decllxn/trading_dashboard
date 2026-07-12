@@ -389,3 +389,85 @@ function dayKey(iso: string | null | undefined): string | null {
   if (Number.isNaN(ms)) return null;
   return new Date(ms).toISOString().slice(0, 10);
 }
+
+/**
+ * Build a cumulative P&L series for lightweight-charts: one point per day.
+ * Returns { time: 'YYYY-MM-DD', value: number }[] where time is the date string
+ * and value is the running total up to that day.
+ */
+export function cumulativePnlSeries(trades: ReadonlyArray<StatTrade>): { time: string; value: number }[] {
+  const closed = trades.filter(
+    (t): t is StatTrade & { pnl: number } =>
+      t.status !== 'open' && t.pnl != null,
+  );
+  if (closed.length === 0) return [];
+
+  const buckets = new Map<string, number>();
+  let unknownDay = 0;
+  for (const t of closed) {
+    const day = dayKey(t.entryTime);
+    if (day === null) {
+      unknownDay += t.pnl;
+    } else {
+      buckets.set(day, (buckets.get(day) ?? 0) + t.pnl);
+    }
+  }
+
+  const days = [...buckets.keys()].sort();
+  const series: { time: string; value: number }[] = [];
+  let cumulative = unknownDay;
+  for (const day of days) {
+    cumulative += buckets.get(day)!;
+    series.push({ time: day, value: cumulative });
+  }
+  return series;
+}
+
+/**
+ * Computes a histogram distribution of R-multiples for all closed trades with a
+ * valid rMultiple. Trades are grouped into buckets of `step` size.
+ * Returns a continuous series from the minimum to maximum observed bucket.
+ */
+export function rMultipleDistribution(
+  trades: ReadonlyArray<StatTrade>,
+  step = 0.5,
+): { bucket: number; label: string; count: number; isGain: boolean }[] {
+  const rs = trades
+    .filter((t) => t.status !== 'open' && t.rMultiple != null)
+    .map((t) => t.rMultiple as number);
+
+  if (rs.length === 0) return [];
+
+  const minR = Math.min(...rs);
+  const maxR = Math.max(...rs);
+
+  const startBucket = Math.floor(minR / step) * step;
+  const endBucket = Math.ceil(maxR / step) * step;
+
+  const buckets = new Map<number, number>();
+
+  for (let b = startBucket; b <= endBucket + 0.0001; b += step) {
+    const roundedBucket = Math.round(b / step) * step;
+    buckets.set(roundedBucket, 0);
+  }
+
+  for (const r of rs) {
+    const bucket = Math.floor(r / step) * step;
+    const roundedBucket = Math.round(bucket / step) * step;
+    buckets.set(roundedBucket, (buckets.get(roundedBucket) ?? 0) + 1);
+  }
+
+  const distribution: { bucket: number; label: string; count: number; isGain: boolean }[] = [];
+  const sortedKeys = Array.from(buckets.keys()).sort((a, b) => a - b);
+
+  for (const b of sortedKeys) {
+    distribution.push({
+      bucket: b,
+      label: `${b > 0 ? '+' : ''}${b.toFixed(1)}R`,
+      count: buckets.get(b)!,
+      isGain: b >= 0,
+    });
+  }
+
+  return distribution;
+}

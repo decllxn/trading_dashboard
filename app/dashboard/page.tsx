@@ -11,9 +11,13 @@ import {
   sortinoRatio,
   tradeCount,
   winRate,
+  cumulativePnlSeries,
+  rMultipleDistribution,
 } from '@/lib/stats';
 import { EdgeScoreGauge } from '@/components/dashboard/edge-score-gauge';
 import { StatGrid } from '@/components/dashboard/stat-grid';
+import { EquityCurveChart } from '@/components/charts/equity-curve-chart';
+import { RMultipleHistogram } from '@/components/charts/r-multiple-histogram';
 import type { StatTrade } from '@/lib/stats';
 
 export const dynamic = 'force-dynamic';
@@ -98,6 +102,9 @@ export default async function DashboardPage() {
   const sharpe = sharpeRatio(trades);
   const sortino = sortinoRatio(trades);
   const avgR = averageR(trades);
+  
+  const equityData = cumulativePnlSeries(trades);
+  const distributionData = rMultipleDistribution(trades);
 
   return (
     <main className="px-6 py-6">
@@ -148,6 +155,14 @@ export default async function DashboardPage() {
             </div>
           </section>
         </div>
+      </div>
+
+      <div className="mt-6">
+        <EquityCurveChart data={equityData} />
+      </div>
+
+      <div className="mt-6">
+        <RMultipleHistogram data={distributionData} />
       </div>
     </main>
   );

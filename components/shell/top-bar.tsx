@@ -2,6 +2,7 @@
 
 import { ChevronDown } from 'lucide-react';
 import { AccountMenu } from './account-menu';
+import { SignalStrip } from '../charts/signal-strip';
 
 /**
  * Static selector placeholder. Real account/timeframe data wiring comes later;
@@ -19,21 +20,33 @@ function Selector({ label }: { label: string }) {
   );
 }
 
-export function TopBar({ email }: { email: string }) {
+interface TopBarProps {
+  email: string;
+  equityData?: { time: string; value: number }[];
+}
+
+export function TopBar({ email, equityData = [] }: TopBarProps) {
   return (
-    <header className="border-hairline bg-base flex h-14 items-center justify-between border-b px-6">
-      <div className="flex items-center gap-6">
-        <span className="font-display text-primary text-sm">
-          Trading Dashboard
-        </span>
+    <div className="flex flex-col w-full">
+      <header className="border-hairline bg-base flex h-14 items-center justify-between border-b px-6">
+        <div className="flex items-center gap-6">
+          <span className="font-display text-primary text-sm">
+            Trading Dashboard
+          </span>
+        </div>
+        <div className="flex items-center gap-4">
+          <Selector label="Paper · Alpaca" />
+          <span className="border-hairline h-4 border-l" />
+          <Selector label="1M" />
+          <span className="border-hairline h-4 border-l" />
+          <AccountMenu email={email} />
+        </div>
+      </header>
+      <div className="border-hairline bg-surface flex h-8 items-center border-b">
+        <div className="h-full w-full">
+          <SignalStrip data={equityData} />
+        </div>
       </div>
-      <div className="flex items-center gap-4">
-        <Selector label="Paper · Alpaca" />
-        <span className="border-hairline h-4 border-l" />
-        <Selector label="1M" />
-        <span className="border-hairline h-4 border-l" />
-        <AccountMenu email={email} />
-      </div>
-    </header>
+    </div>
   );
 }
