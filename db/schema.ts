@@ -1,10 +1,10 @@
 /**
  * Drizzle schema — single source of truth for the Postgres tables.
  *
- * Phases 2a (trades), 2b (tags + trade_tags), and 2c (journal_entries +
- * journal_trade_links) live here. Later phases (2d broker_connections) append
- * to this file; do not split schemas across modules — Drizzle reads the whole
- * `db/schema.ts` as one graph.
+ * Phases 2a (trades), 2b (tags + trade_tags), 2c (journal_entries +
+ * journal_trade_links), and 2d (broker_connections) live here. Phase 2 is now
+ * complete; later phases append to this file. Do not split schemas across
+ * modules — Drizzle reads the whole `db/schema.ts` as one graph.
  *
  * Conventions enforced here:
  * - Money/price/size columns are `numeric(p, s)` (decimal), never `real`/`double
@@ -114,7 +114,10 @@ export const trades = pgTable('trades', {
   // Forward reference: Phase 2d adds the broker_connections table and this
   // becomes a real FK. Kept nullable + untyped for now so open/manual trades
   // (the vast majority) carry no broker linkage.
-  brokerConnectionId: uuid('broker_connection_id'),
+  brokerConnectionId: uuid('broker_connection_id').references(
+    () => brokerConnections.id,
+    { onDelete: 'set null' },
+  ),
 
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
@@ -239,3 +242,58 @@ export type JournalEntry = typeof journalEntries.$inferSelect;
 export type NewJournalEntry = typeof journalEntries.$inferInsert;
 export type JournalTradeLink = typeof journalTradeLinks.$inferSelect;
 export type NewJournalTradeLink = typeof journalTradeLinks.$inferInsert;
+
+/**
+ * broker_provider — how a brokerage link is managed. `snaptrade` = the
+ * connection flows through SnapTrade (Phase 8a); `manual` = the user typed the
+ * broker name themselves with no live linkage (e.g. for CSV import provenance).
+ */
+export const brokerProviderEnum = pgEnum('broker_provider', [
+  'snaptrade',
+  'manual',
+]);
+
+/**
+ * broker_connection_status — the lifecycle state of a brokerage link.
+ * `active` = connected and syncing; `error` = the last sync failed (auth
+ * revoked, broker outage); `disconnected` = the user or broker revoked the
+ * link. Trades keep referencing the row (their `broker_connection_id` stays
+ * populated) regardless of status — status only governs whether Phase 8 syncs
+ * pull fresh data.
+ */
+export const brokerConnectionStatusEnum = pgEnum('broker_connection_status', [
+  'active',
+  'error',
+  'disconnected',
+]);
+
+/**
+ * broker_connections — a user's linked brokerage accounts. Populated in Phase 8
+ * (SnapTrade connection flow); the schema is finalized here. `trades.
+ * broker_connection_id` references this table `ON DELETE SET NULL`, so deleting
+ * a connection preserves trade history (the trade just loses its link).
+ *
+ * `external_account_id` is the broker-side identifier (e.g. SnapTrade account
+ * reference); nullable because `manual` connections have none. `last_synced_at`
+ * is null until the first successful sync.
+ */
+export const brokerConnections = pgTable('broker_connections', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull(),
+  provider: brokerProviderEnum('provider').notNull(),
+  externalAccountId: text('external_account_id'),
+  brokerName: text('broker_name').notNull(),
+  status: brokerConnectionStatusEnum('status').notNull().default('active'),
+  lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type BrokerConnection = typeof brokerConnections.$inferSelect;
+export type NewBrokerConnection = typeof brokerConnections.$inferInsert;
+/** Union of valid broker_provider values: 'snaptrade' | 'manual'. */
+export type BrokerProvider = (typeof brokerProviderEnum.enumValues)[number];
+/** 'active' | 'error' | 'disconnected'. */
+export type BrokerConnectionStatus =
+  (typeof brokerConnectionStatusEnum.enumValues)[number];
