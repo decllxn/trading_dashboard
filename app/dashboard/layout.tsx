@@ -6,6 +6,7 @@ import {
 } from '@/lib/supabase';
 import { NavRail } from '@/components/shell/nav-rail';
 import { TopBar } from '@/components/shell/top-bar';
+import { cumulativePnlSeries, type StatTrade } from '@/lib/stats';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,6 +45,25 @@ export default async function DashboardLayout({
     redirect('/login');
   }
 
+  const { data: rawTrades } = await supabase
+    .from('trades')
+    .select('pnl, r_multiple, entry_time, status')
+    .eq('user_id', user.id);
+
+  const trades: StatTrade[] = ((rawTrades ?? []) as Array<{
+    pnl: string | null;
+    r_multiple: string | null;
+    entry_time: string | null;
+    status: string;
+  }>).map((t) => ({
+    pnl: t.pnl ? Number(t.pnl) : null,
+    rMultiple: t.r_multiple ? Number(t.r_multiple) : null,
+    entryTime: t.entry_time,
+    status: t.status,
+  }));
+
+  const equityData = cumulativePnlSeries(trades);
+
   // Persistent app shell: rail + (top bar + content). The 32px signal strip
   // that belongs under the top bar returns in Phase 5c with live equity data.
   // The frame persists across all /dashboard/* navigation; only {children}
@@ -52,7 +72,7 @@ export default async function DashboardLayout({
     <div className="bg-base flex min-h-screen">
       <NavRail />
       <div className="flex flex-1 flex-col">
-        <TopBar email={user.email ?? ''} />
+        <TopBar email={user.email ?? ''} equityData={equityData} />
         <main className="flex-1">{children}</main>
       </div>
     </div>
