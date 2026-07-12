@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Plus } from 'lucide-react';
+import { Plus, Upload } from 'lucide-react';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import type { TradeRow, TradeRowTag } from '@/lib/trades';
 import { TradesTable } from '@/components/trades/trades-table';
@@ -145,13 +145,22 @@ export default async function TradesPage() {
               : `${rows.length} trade${rows.length === 1 ? '' : 's'} logged.`}
           </p>
         </div>
-        <Link
-          href="/dashboard/trades/new"
-          className="bg-accent-signal text-base inline-flex items-center gap-1.5 rounded-card px-3 py-2 text-sm transition-colors duration-150 hover:bg-accent-signal/90"
-        >
-          <Plus size={14} strokeWidth={2} />
-          Log trade
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/dashboard/trades/import"
+            className="border-hairline text-secondary hover:text-primary hover:bg-surface-raised inline-flex items-center gap-1.5 rounded-card border px-3 py-2 text-sm transition-colors duration-150"
+          >
+            <Upload size={14} strokeWidth={1.75} />
+            Import CSV
+          </Link>
+          <Link
+            href="/dashboard/trades/new"
+            className="bg-accent-signal text-base inline-flex items-center gap-1.5 rounded-card px-3 py-2 text-sm transition-colors duration-150 hover:bg-accent-signal/90"
+          >
+            <Plus size={14} strokeWidth={2} />
+            Log trade
+          </Link>
+        </div>
       </div>
 
       <TradesTable trades={rows} tags={tags} />
