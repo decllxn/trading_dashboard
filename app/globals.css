@@ -80,4 +80,49 @@
     font-variant-numeric: tabular-nums;
     font-feature-settings: 'tnum' 1;
   }
+
+  /* Tiptap Editor Styles */
+  .prose-custom {
+    @apply text-primary font-sans text-sm outline-none;
+  }
+  .prose-custom p {
+    @apply mb-4 leading-relaxed;
+  }
+  .prose-custom p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
+    @apply text-tertiary;
+  }
+  .prose-custom h1 {
+    @apply font-display text-2xl text-primary mb-4 mt-6;
+  }
+  .prose-custom h2 {
+    @apply font-display text-xl text-primary mb-3 mt-5;
+  }
+  .prose-custom ul {
+    @apply list-disc list-inside mb-4;
+  }
+  .prose-custom ol {
+    @apply list-decimal list-inside mb-4;
+  }
+  .prose-custom strong {
+    @apply font-bold text-primary;
+  }
+  .prose-custom em {
+    @apply italic;
+  }
+  .prose-custom li {
+    @apply mb-1;
+  }
+  .prose-custom blockquote {
+    @apply border-l-2 border-hairline pl-4 italic text-secondary my-4;
+  }
+  .prose-custom code {
+    @apply bg-surface-raised px-1.5 py-0.5 rounded text-sm font-mono text-primary;
+  }
+  .prose-custom hr {
+    @apply border-hairline my-6;
+  }
 }

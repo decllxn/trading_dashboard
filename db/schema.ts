@@ -225,8 +225,9 @@ export const journalEntries = pgTable(
     // Tiptap JSON document. Typed as `unknown` until Phase 7a pins the
     // editor's concrete TiptapDoc type here via `$type<TiptapDoc>()`.
     content: jsonb('content'),
-    // Free-text mood label; later phases may constrain to emotion-tag names.
+    textContent: text('text_content'),
     mood: text('mood'),
+    mistakes: jsonb('mistakes').$type<string[]>().default([]),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
