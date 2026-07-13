@@ -390,3 +390,26 @@ export const userSettings = pgTable('user_settings', {
 
 export type UserSettings = typeof userSettings.$inferSelect;
 export type NewUserSettings = typeof userSettings.$inferInsert;
+
+/**
+ * market_data_cache — server-side daily-refresh cache for market data (Alpaca + Twelve Data).
+ *
+ * Caches stock (SPY) and forex price series JSON arrays so page loads do not hit
+ * external APIs on every refresh. Primary key is a composite of (symbol, timeframe).
+ */
+export const marketDataCache = pgTable(
+  'market_data_cache',
+  {
+    symbol: text('symbol').notNull(),
+    timeframe: text('timeframe').notNull(), // e.g. '1D', '1Hour'
+    data: jsonb('data').$type<{ time: string; value: number }[]>().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.symbol, t.timeframe] })]
+);
+
+export type MarketDataCache = typeof marketDataCache.$inferSelect;
+export type NewMarketDataCache = typeof marketDataCache.$inferInsert;
+
