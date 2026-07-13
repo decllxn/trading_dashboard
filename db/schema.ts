@@ -292,18 +292,28 @@ export const brokerConnectionStatusEnum = pgEnum('broker_connection_status', [
  * reference); nullable because `manual` connections have none. `last_synced_at`
  * is null until the first successful sync.
  */
-export const brokerConnections = pgTable('broker_connections', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').notNull(),
-  provider: brokerProviderEnum('provider').notNull(),
-  externalAccountId: text('external_account_id'),
-  brokerName: text('broker_name').notNull(),
-  status: brokerConnectionStatusEnum('status').notNull().default('active'),
-  lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+export const brokerConnections = pgTable(
+  'broker_connections',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull(),
+    provider: brokerProviderEnum('provider').notNull(),
+    externalAccountId: text('external_account_id'),
+    brokerName: text('broker_name').notNull(),
+    status: brokerConnectionStatusEnum('status').notNull().default('active'),
+    lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique('broker_connections_user_provider_external_account_uidx').on(
+      t.userId,
+      t.provider,
+      t.externalAccountId,
+    ),
+  ],
+);
 
 export type BrokerConnection = typeof brokerConnections.$inferSelect;
 export type NewBrokerConnection = typeof brokerConnections.$inferInsert;
@@ -312,6 +322,24 @@ export type BrokerProvider = (typeof brokerProviderEnum.enumValues)[number];
 /** 'active' | 'error' | 'disconnected'. */
 export type BrokerConnectionStatus =
   (typeof brokerConnectionStatusEnum.enumValues)[number];
+
+/**
+ * snaptrade_users — server-only credentials for the SnapTrade commercial flow.
+ *
+ * SnapTrade issues one secret for each registered end user. The record is
+ * intentionally kept separate from broker_connections: one SnapTrade identity
+ * can own multiple brokerage accounts. No RLS policy grants browser clients
+ * access to this table; only server code using the database connection reads it.
+ */
+export const snaptradeUsers = pgTable('snaptrade_users', {
+  userId: uuid('user_id').primaryKey().notNull(),
+  userSecret: text('user_secret').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type SnaptradeUser = typeof snaptradeUsers.$inferSelect;
 
 /**
  * csv_mappings — one saved CSV column-mapping per (user, broker_name) for the
@@ -349,7 +377,9 @@ export type NewCsvMapping = typeof csvMappings.$inferInsert;
  */
 export const userSettings = pgTable('user_settings', {
   userId: uuid('user_id').primaryKey().notNull(),
-  chartSessionsEnabled: boolean('chart_sessions_enabled').notNull().default(false),
+  chartSessionsEnabled: boolean('chart_sessions_enabled')
+    .notNull()
+    .default(false),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
