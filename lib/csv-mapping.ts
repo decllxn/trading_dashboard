@@ -16,9 +16,9 @@
  * performs the bulk insert; `r_multiple` is recomputed there via the existing
  * `computeRMultiple` helper so this module doesn't duplicate that formula.
  */
-import type { AssetClass, Direction, TradeStatus } from '@/db/schema';
-import { parseNumber } from '@/lib/trades';
-import type { ParsedCsv } from '@/lib/csv';
+import type { AssetClass, Direction, TradeStatus } from '../db/schema.ts';
+import { parseNumber } from './trades.ts';
+import type { ParsedCsv } from './csv.ts';
 
 /** trades fields a user can map a CSV column onto. */
 export type TradesField =
