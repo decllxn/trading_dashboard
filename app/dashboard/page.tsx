@@ -18,6 +18,7 @@ import { EdgeScoreGauge } from '@/components/dashboard/edge-score-gauge';
 import { StatGrid } from '@/components/dashboard/stat-grid';
 import { EquityCurveChart } from '@/components/charts/equity-curve-chart';
 import { RMultipleHistogram } from '@/components/charts/r-multiple-histogram';
+import { MoodChart } from '@/components/charts/mood-chart';
 import type { StatTrade } from '@/lib/stats';
 
 export const dynamic = 'force-dynamic';
@@ -106,6 +107,27 @@ export default async function DashboardPage() {
   const equityData = cumulativePnlSeries(trades);
   const distributionData = rMultipleDistribution(trades);
 
+  // Fetch journal entries for mood over time
+  const { data: journals } = await supabase
+    .from('journal_entries')
+    .select('date, mood')
+    .eq('user_id', user.id)
+    .not('mood', 'is', null)
+    .order('date', { ascending: true });
+
+  const MOOD_VALUES: Record<string, number> = {
+    'Disciplined': 4,
+    'Hesitant': 3,
+    'FOMO': 2,
+    'Revenge Trade': 1
+  };
+
+  const moodData = (journals || []).map(entry => ({
+    date: entry.date,
+    mood: entry.mood as string,
+    moodValue: MOOD_VALUES[entry.mood as string] || 2
+  }));
+
   return (
     <main className="px-6 py-6">
       <div className="mb-6">
@@ -157,8 +179,9 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <div className="mt-6">
+      <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
         <EquityCurveChart data={equityData} />
+        <MoodChart data={moodData} />
       </div>
 
       <div className="mt-6">

@@ -12,8 +12,11 @@ export const dynamic = 'force-dynamic';
 export default async function TradeDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }> | { id: string };
 }) {
+  const resolvedParams = await Promise.resolve(params);
+  const id = resolvedParams.id;
+
   if (!isSupabaseConfigured()) {
     return (
       <main className="p-6">
@@ -36,7 +39,7 @@ export default async function TradeDetailPage({
   const { data: trade, error } = await supabase
     .from('trades')
     .select('*')
-    .eq('id', params.id)
+    .eq('id', id)
     .single();
 
   if (error || !trade) notFound();
@@ -52,6 +55,14 @@ export default async function TradeDetailPage({
     .select('chart_sessions_enabled')
     .eq('user_id', user.id)
     .single();
+
+  // Load linked journal entries
+  const { data: links } = await supabase
+    .from('journal_trade_links')
+    .select('journal_entries(id, date, mood, text_content)')
+    .eq('trade_id', trade.id);
+    
+  const linkedEntries = (links || []).map(l => l.journal_entries).filter(Boolean);
 
   const sessionsEnabled = userSettings?.chart_sessions_enabled ?? false;
 
@@ -92,12 +103,39 @@ export default async function TradeDetailPage({
         </div>
       </header>
 
-      <div className="flex-1 p-4 bg-base overflow-hidden">
-        <TradeChart 
-          trade={trade as any} 
-          initialAnnotations={annotations} 
-          sessionsEnabled={sessionsEnabled} 
-        />
+      <div className="flex-1 flex overflow-hidden">
+        {/* Main Chart Area */}
+        <div className="flex-1 p-4 bg-base overflow-hidden border-r border-hairline">
+          <TradeChart 
+            trade={trade as any} 
+            initialAnnotations={annotations} 
+            sessionsEnabled={sessionsEnabled} 
+          />
+        </div>
+        
+        {/* Sidebar: Linked Journal Entries */}
+        <div className="w-80 shrink-0 bg-surface flex flex-col overflow-y-auto">
+          <div className="p-4 border-b border-hairline">
+             <h2 className="font-display text-primary text-sm uppercase tracking-wide">Linked Journal Entries</h2>
+          </div>
+          <div className="p-4 flex flex-col gap-4">
+             {linkedEntries.length === 0 ? (
+               <p className="text-sm text-tertiary">No journal entries linked to this trade.</p>
+             ) : (
+               linkedEntries.map((entry: any) => (
+                 <Link href="/dashboard/journal" key={entry.id} className="block group border border-hairline bg-base p-3 rounded-card transition-colors hover:border-accent-signal">
+                   <div className="flex items-center justify-between mb-2">
+                     <span className="text-xs font-mono text-accent-signal">{entry.date}</span>
+                     {entry.mood && <span className="text-[10px] text-tertiary uppercase border border-hairline px-1.5 py-0.5 rounded">{entry.mood}</span>}
+                   </div>
+                   <p className="text-sm text-secondary line-clamp-3 group-hover:text-primary transition-colors">
+                     {entry.text_content || 'No text content'}
+                   </p>
+                 </Link>
+               ))
+             )}
+          </div>
+        </div>
       </div>
     </main>
   );
