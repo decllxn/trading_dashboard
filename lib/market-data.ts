@@ -1,5 +1,5 @@
-import { db } from '@/db';
-import { marketDataCache } from '@/db/schema';
+import { db } from '../db/index.ts';
+import { marketDataCache } from '../db/schema.ts';
 import { eq, and } from 'drizzle-orm';
 
 export interface Bar {
@@ -26,14 +26,16 @@ export async function fetchAlpacaBars(
   const alpacaTimeframe = timeframe === '1D' ? '1Day' : timeframe;
   const queryStart = start || '2024-01-01';
 
-  // We request raw closing prices, split and dividend adjusted so performance returns are accurate
   const url = `https://data.alpaca.markets/v2/stocks/bars?symbols=${symbol}&timeframe=${alpacaTimeframe}&start=${queryStart}&limit=10000&adjustment=all`;
 
   const bars: Bar[] = [];
   let nextPageToken: string | null = null;
 
   do {
-    const fetchUrl = nextPageToken ? `${url}&page_token=${nextPageToken}` : url;
+    let fetchUrl: string = url;
+    if (nextPageToken) {
+      fetchUrl = `${url}&page_token=${nextPageToken}`;
+    }
     const res = await fetch(fetchUrl, {
       headers: {
         'APCA-API-KEY-ID': apiKey,
@@ -62,7 +64,6 @@ export async function fetchAlpacaBars(
     nextPageToken = json.next_page_token;
   } while (nextPageToken);
 
-  // Sort chronologically ascending
   return bars.sort((a, b) => a.time.localeCompare(b.time));
 }
 
@@ -98,7 +99,6 @@ export async function fetchTwelveDataBars(
 
   const values = json.values || [];
   const bars: Bar[] = values.map((v: any) => ({
-    // Date formats can be YYYY-MM-DD or YYYY-MM-DD HH:mm:ss for intraday
     time: v.datetime.split(' ')[0],
     value: Number(v.close),
   }));
@@ -109,6 +109,7 @@ export async function fetchTwelveDataBars(
 
 /**
  * High-level market data getter with a daily-refresh caching layer in Supabase.
+ * Falls back to Twelve Data if Alpaca fails (e.g. unauthorized credentials).
  */
 export async function getMarketData(
   symbol: string,
@@ -116,23 +117,24 @@ export async function getMarketData(
   start?: string
 ): Promise<Bar[]> {
   const fetchFn = async () => {
-    // If it's a forex pair (contains a slash or is standard forex like EUR/USD, GBP/USD, etc.), use Twelve Data.
-    // Otherwise, use Alpaca for US stocks.
     const isForex = symbol.includes('/') || symbol.includes('-') || symbol.length > 5;
     if (isForex) {
       return fetchTwelveDataBars(symbol, timeframe, start);
     } else {
-      return fetchAlpacaBars(symbol, timeframe, start);
+      try {
+        return await fetchAlpacaBars(symbol, timeframe, start);
+      } catch (alpacaError) {
+        console.warn(`Alpaca failed for ${symbol}, falling back to Twelve Data:`, alpacaError);
+        return fetchTwelveDataBars(symbol, timeframe, start);
+      }
     }
   };
 
   if (!db) {
-    // Graceful fallback if database is not configured
     return fetchFn();
   }
 
   try {
-    // 1. Check if cached data exists
     const cached = await db.query.marketDataCache.findFirst({
       where: and(
         eq(marketDataCache.symbol, symbol),
@@ -144,7 +146,6 @@ export async function getMarketData(
     if (cached) {
       const cachedDate = new Date(cached.updatedAt);
       
-      // Check if daily refresh is needed (same calendar day in UTC or older than 24 hours)
       const isSameDay =
         now.getUTCDate() === cachedDate.getUTCDate() &&
         now.getUTCMonth() === cachedDate.getUTCMonth() &&
@@ -158,10 +159,8 @@ export async function getMarketData(
       }
     }
 
-    // 2. Fetch fresh data
     const freshData = await fetchFn();
 
-    // 3. Upsert cache in database
     await db
       .insert(marketDataCache)
       .values({
@@ -181,7 +180,6 @@ export async function getMarketData(
     return freshData;
   } catch (error) {
     console.error(`Error in getMarketData for ${symbol}:`, error);
-    // If the cache lookup or upsert fails, fallback to fresh API fetch so dashboard doesn't crash
     return fetchFn();
   }
 }

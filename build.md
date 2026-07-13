@@ -424,38 +424,62 @@ it up in DESIGN_SYSTEM.md rather than guessing.
 
 ---
 
-## Phase 11 — AI Copilot ("Jarvis")
+## Phase 11 — AI Copilot ("Jarvis") — Gemini Edition
 
-**11a. Claude API route + tools**
-> [Style Guard — backend] Build a server route calling the Anthropic API with tool
-> definitions that query the user's own data: `get_trade_stats(filters)`,
-> `search_journal(query)`, `get_trades(filters)`. Each tool executes a real, scoped
-> (RLS-respecting) database query — never let the model see another user's data.
-> **Done when:** a test query like "how did my FVG trades do last month" correctly invokes
-> the right tool and returns an accurate, grounded answer.
+Same structure as before, updated to swap Anthropic for Google Gemini. Package: `@google/genai` (the current official SDK), env var: `GEMINI_API_KEY`. Gemini supports function calling (their term for tool use) the same way — you define tool schemas, the model decides when to call them, you execute and return results.
+
+**11a. Gemini API route + tools**
+
+**Prompt for your agent:**
+
+[Style Guard] Build a server route calling the Google Gemini API (use the `@google/genai` SDK, model `gemini-2.5-pro` or `gemini-2.5-flash` for lower latency — pick flash unless answer quality is clearly worse) with function-calling tool definitions that query the user's own data: `get_trade_stats(filters)`, `search_journal(query)`, `get_trades(filters)`. Each tool executes a real, scoped (RLS-respecting) database query — never let the model see another user's data. Handle Gemini's function-calling response format: when the model returns a `functionCall` part, execute the matching tool, send the result back as a `functionResponse` part, and continue the conversation loop until the model returns a final text response.
+
+**Done when:** a test query like "how did my FVG trades do last month" correctly invokes the right tool and returns an accurate, grounded answer.
+
+**Env setup:**
+
+```dotenv
+GEMINI_API_KEY=your_key_here
+```
+
+Get it free at [aistudio.google.com/apikey](https://aistudio.google.com/apikey) — sign in with Google, generate a key, no card required for the free tier.
+
+**Verify install/env:**
+
+```powershell
+npm ls @google/genai
+Get-Content .env.local | Select-String "GEMINI_API_KEY"
+```
 
 **11b. Chat UI**
-> [Style Guard] Build `/copilot`: a chat interface styled per the design system (no
-> generic rounded-bubble chat cliché — keep it consistent with the instrument-panel look,
-> monospace for any numbers the assistant returns), streaming responses, showing which
-> tool was called for transparency (small inline indicator, not a big debug panel).
-> **Done when:** conversation flows naturally, tool calls are visible, numeric answers are
-> correct against the underlying data.
+
+**Prompt for your agent:**
+
+[Style Guard] Build `/copilot`: a chat interface styled per the design system (no generic rounded-bubble chat cliché — keep it consistent with the instrument-panel look, monospace for any numbers the assistant returns), streaming responses using Gemini's `generateContentStream`, showing which tool was called for transparency (small inline indicator, not a big debug panel).
+
+**Done when:** conversation flows naturally, tool calls are visible, numeric answers are correct against the underlying data.
 
 **11c. Weekly auto-review**
-> [Style Guard] Add a scheduled job that generates a weekly review: feeds the week's
-> trades + journal entries to Claude with a prompt asking it to identify patterns and
-> recurring mistakes grounded only in what's provided (no speculation), stores the result,
-> surfaces it on the dashboard.
-> **Done when:** the job runs on schedule and produces a grounded, specific review (not
-> generic platitudes) from real data.
+
+**Prompt for your agent:**
+
+[Style Guard] Add a scheduled job (reuse the same job runner from Phase 8d) that generates a weekly review: feeds the week's trades + journal entries to Gemini with a prompt asking it to identify patterns and recurring mistakes grounded only in what's provided (no speculation, explicitly instruct the model not to infer beyond the data given), stores the result in a new `weekly_reviews` table (RLS-scoped like every other table — don't forget the grant this time), surfaces it on the dashboard.
+
+**Done when:** the job runs on schedule and produces a grounded, specific review (not generic platitudes) from real data.
 
 **11d. Copilot polish**
-> [Style Guard] Add conversation history/persistence per user, and a few suggested-prompt
-> chips on first load (real, useful ones — "Compare my London vs New York session
-> performance", not filler).
-> **Done when:** history persists across sessions, suggested prompts work correctly when
-> clicked.
+
+**Prompt for your agent:**
+
+[Style Guard] Add conversation history/persistence per user (new `copilot_conversations` + `copilot_messages` tables, RLS-scoped), and a few suggested-prompt chips on first load (real, useful ones — "Compare my London vs New York session performance", not filler).
+
+**Done when:** history persists across sessions, suggested prompts work correctly when clicked.
+
+## One thing worth flagging before you start 11a
+
+Gemini's tool-calling loop has a slightly different shape than the Claude-based version this plan originally assumed — specifically, multi-turn tool use (model calls a tool, gets a result, decides to call another tool before answering) needs to be handled as an explicit loop in your route rather than a single request/response. Worth telling the agent that explicitly if the first pass only handles a single tool call correctly:
+
+**Update the Gemini route to loop:** after executing a tool and sending back the `functionResponse`, check if the next model response contains another `functionCall` before treating it as final — repeat until you get a plain text response, with a max of 5 iterations as a safety cap.
 
 ---
 

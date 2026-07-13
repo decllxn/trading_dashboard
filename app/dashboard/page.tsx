@@ -13,12 +13,14 @@ import {
   winRate,
   cumulativePnlSeries,
   rMultipleDistribution,
+  computeRollingStats,
 } from '@/lib/stats';
 import { EdgeScoreGauge } from '@/components/dashboard/edge-score-gauge';
 import { StatGrid } from '@/components/dashboard/stat-grid';
-import { EquityCurveChart } from '@/components/charts/equity-curve-chart';
+import { EquityComparisonChart } from '@/components/charts/equity-comparison-chart';
 import { RMultipleHistogram } from '@/components/charts/r-multiple-histogram';
 import { MoodChart } from '@/components/charts/mood-chart';
+import { getMarketData } from '@/lib/market-data';
 import type { StatTrade } from '@/lib/stats';
 
 export const dynamic = 'force-dynamic';
@@ -107,6 +109,40 @@ export default async function DashboardPage() {
   const equityData = cumulativePnlSeries(trades);
   const distributionData = rMultipleDistribution(trades);
 
+  // Find start date from trade history or default to 2024-01-01
+  const entryDates = trades.map((t) => t.entryTime).filter((d): d is string => !!d);
+  const startDate = entryDates.length > 0 ? entryDates.sort()[0].split('T')[0] : '2024-01-01';
+
+  // Fetch SPY daily closing prices through the cached client
+  let spyData: { time: string; value: number }[] = [];
+  let userReturnSeries: { time: string; value: number }[] = [];
+  let spyReturnSeries: { time: string; value: number }[] = [];
+  let currentStats: { alpha: number | null; beta: number | null; correlation: number | null } | null = null;
+
+  if (!empty) {
+    try {
+      spyData = await getMarketData('SPY', '1D', startDate);
+      
+      const startingBalance = 100000;
+      userReturnSeries = equityData.map(pt => ({
+        time: pt.time,
+        value: (pt.value / startingBalance) * 100
+      }));
+
+      const spyInitial = spyData.length > 0 ? spyData[0].value : 1;
+      spyReturnSeries = spyData.map(pt => ({
+        time: pt.time,
+        value: spyInitial === 0 ? 0 : ((pt.value - spyInitial) / spyInitial) * 100
+      }));
+
+      // Default rolling window length is 30 days
+      const rollingStats = computeRollingStats(equityData, spyData, 30, startingBalance);
+      currentStats = rollingStats.length > 0 ? rollingStats[rollingStats.length - 1] : null;
+    } catch (err) {
+      console.error('Error loading market comparison data:', err);
+    }
+  }
+
   // Fetch journal entries for mood over time
   const { data: journals } = await supabase
     .from('journal_entries')
@@ -180,7 +216,11 @@ export default async function DashboardPage() {
       </div>
 
       <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <EquityCurveChart data={equityData} />
+        <EquityComparisonChart 
+          userReturnSeries={userReturnSeries} 
+          spyReturnSeries={spyReturnSeries} 
+          currentStats={currentStats} 
+        />
         <MoodChart data={moodData} />
       </div>
 
