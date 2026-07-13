@@ -35,6 +35,7 @@ import {
   sortinoRatio,
   tradeCount,
   winRate,
+  computeRollingStats,
   type StatTrade,
 } from './stats.ts';
 
@@ -209,3 +210,52 @@ test('trades with no entry time still count toward stats', () => {
   // Both land on the "unknown day" bucket → single-point series.
   assert.deepEqual(dailyPnlSeries(noTime), [60]);
 });
+
+test('computeRollingStats matches hand-calculated OLS expected values', () => {
+  const userPnlSeries = [
+    { time: '2024-01-01', value: 0 },
+    { time: '2024-01-02', value: 1000 },
+    { time: '2024-01-03', value: 3020 },
+    { time: '2024-01-04', value: 1989.80 },
+  ];
+
+  const spyCloseSeries = [
+    { time: '2024-01-01', value: 100.0 },
+    { time: '2024-01-02', value: 102.0 },
+    { time: '2024-01-03', value: 103.02 },
+    { time: '2024-01-04', value: 99.9294 },
+  ];
+
+  // Starting balance = 100000, 3-day rolling window
+  const rolling = computeRollingStats(userPnlSeries, spyCloseSeries, 3, 100000);
+
+  // We should have 3 aligned daily return points (Day 1, 2, 3)
+  // Day 1 & Day 2 will have null stats because window length is 3
+  // Day 3 will have the first valid stats
+  assert.equal(rolling.length, 3);
+  
+  assert.equal(rolling[0].time, '2024-01-02');
+  assert.equal(rolling[0].beta, null);
+  assert.equal(rolling[0].alpha, null);
+
+  assert.equal(rolling[1].time, '2024-01-03');
+  assert.equal(rolling[1].beta, null);
+  assert.equal(rolling[1].alpha, null);
+
+  assert.equal(rolling[2].time, '2024-01-04');
+  
+  // Hand-calculated expected values:
+  // Beta = 0.5
+  // Alpha = 0.006666667 (approx 2/300)
+  // Correlation = 0.8660254 (approx sqrt(3)/2)
+  assert.ok(rolling[2].beta !== null);
+  assert.ok(rolling[2].alpha !== null);
+  assert.ok(rolling[2].correlation !== null);
+
+  assert.ok(Math.abs(rolling[2].beta - 0.5) < 1e-7);
+  assert.ok(Math.abs(rolling[2].alpha - 0.006666667) < 1e-7);
+  assert.ok(Math.abs(rolling[2].correlation - 0.8660254) < 1e-7);
+  
+  console.log('Rolling OLS stats verified successfully:', rolling[2]);
+});
+

@@ -471,3 +471,136 @@ export function rMultipleDistribution(
 
   return distribution;
 }
+
+export interface RollingStatPoint {
+  time: string;
+  alpha: number | null;
+  beta: number | null;
+  correlation: number | null;
+}
+
+/**
+ * Computes rolling alpha, beta, and correlation of the user's daily returns
+ * against SPY daily returns.
+ * 
+ * Standard OLS Regression:
+ *   User_Return = alpha + beta * SPY_Return + epsilon
+ * 
+ * Default window length: 30 trading days (approx. 1.5 calendar months).
+ * Normalization starting capital: $100,000.
+ */
+export function computeRollingStats(
+  userPnlSeries: ReadonlyArray<{ time: string; value: number }>,
+  spyCloseSeries: ReadonlyArray<{ time: string; value: number }>,
+  windowLength = 30,
+  startingBalance = 100000
+): RollingStatPoint[] {
+  if (userPnlSeries.length === 0 || spyCloseSeries.length < 2) return [];
+
+  // Sort chronologically
+  const userSorted = [...userPnlSeries].sort((a, b) => a.time.localeCompare(b.time));
+  const spySorted = [...spyCloseSeries].sort((a, b) => a.time.localeCompare(b.time));
+
+  // Align user and SPY returns on SPY trading days
+  const alignedPoints: { time: string; userReturn: number; spyReturn: number }[] = [];
+
+  const getPnlAtOrBefore = (dateStr: string) => {
+    let bestPnl = 0;
+    for (const pt of userSorted) {
+      if (pt.time <= dateStr) {
+        bestPnl = pt.value;
+      } else {
+        break;
+      }
+    }
+    return bestPnl;
+  };
+
+  for (let i = 1; i < spySorted.length; i++) {
+    const prevSpy = spySorted[i - 1];
+    const currSpy = spySorted[i];
+    const time = currSpy.time;
+
+    const spyReturn = prevSpy.value === 0 ? 0 : (currSpy.value - prevSpy.value) / prevSpy.value;
+
+    const prevUserPnl = getPnlAtOrBefore(prevSpy.time);
+    const currUserPnl = getPnlAtOrBefore(currSpy.time);
+
+    const prevUserEquity = startingBalance + prevUserPnl;
+    const currUserEquity = startingBalance + currUserPnl;
+
+    const userReturn = prevUserEquity === 0 ? 0 : (currUserEquity - prevUserEquity) / prevUserEquity;
+
+    alignedPoints.push({
+      time,
+      userReturn,
+      spyReturn,
+    });
+  }
+
+  const result: RollingStatPoint[] = [];
+
+  for (let i = 0; i < alignedPoints.length; i++) {
+    const time = alignedPoints[i].time;
+
+    if (i < windowLength - 1) {
+      result.push({
+        time,
+        alpha: null,
+        beta: null,
+        correlation: null,
+      });
+      continue;
+    }
+
+    const window = alignedPoints.slice(i - windowLength + 1, i + 1);
+
+    let sumUser = 0;
+    let sumSpy = 0;
+    for (const pt of window) {
+      sumUser += pt.userReturn;
+      sumSpy += pt.spyReturn;
+    }
+    const meanUser = sumUser / windowLength;
+    const meanSpy = sumSpy / windowLength;
+
+    let num = 0;
+    let denSpy = 0;
+    let denUser = 0;
+
+    for (const pt of window) {
+      const uDiff = pt.userReturn - meanUser;
+      const mDiff = pt.spyReturn - meanSpy;
+
+      num += uDiff * mDiff;
+      denSpy += mDiff * mDiff;
+      denUser += uDiff * uDiff;
+    }
+
+    let beta: number | null = null;
+    let alpha: number | null = null;
+    let correlation: number | null = null;
+
+    if (denSpy > 0) {
+      beta = num / denSpy;
+      alpha = meanUser - beta * meanSpy;
+    }
+
+    if (denSpy > 0 && denUser > 0) {
+      correlation = num / Math.sqrt(denUser * denSpy);
+    } else if (denUser === 0 && denSpy > 0) {
+      correlation = 0;
+      beta = 0;
+      alpha = meanUser;
+    }
+
+    result.push({
+      time,
+      alpha,
+      beta,
+      correlation,
+    });
+  }
+
+  return result;
+}
