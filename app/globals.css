@@ -71,6 +71,19 @@
   }
 
   /*
+   * .no-scrollbar — hides the visible scrollbar on a scroll container while
+   * keeping it fully scrollable (wheel, touch, keyboard). Used on the main app
+   * content pane so the instrument-panel look isn't broken by a native gutter.
+   */
+  .no-scrollbar {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE / legacy Edge */
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none; /* Chromium / Safari */
+  }
+
+  /*
    * .num — apply to EVERY numeric value (price, P&L, stat, percentage, count).
    * Forces IBM Plex Mono + tabular-nums so digits align column-wise and never
    * shift width. In tables, pair with right alignment (never center a number).

@@ -45,7 +45,7 @@ export default async function NewTradePage() {
   const typedTags = (tags ?? []) as unknown as ReadonlyArray<Tag>;
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-8">
+    <main className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
       <header className="mb-8">
         <h1 className="font-display text-primary text-xl">Log a trade</h1>
         <p className="text-secondary mt-1 text-sm">

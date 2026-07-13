@@ -28,7 +28,12 @@
  */
 /** Minimal trade shape consumed by stat functions (subset of TradeRow). */
 export interface StatTrade {
-  /** Signed realized P&L in account currency. Null = not yet realized. */
+  /**
+   * Signed realized P&L in account currency. Callers should pass NET P&L
+   * (gross − commission − swap − fees) so every stat reflects true realized
+   * result; use `computeNetPnl` to derive it from the raw trade columns.
+   * Null = not yet realized.
+   */
   pnl: number | null;
   /** Signed R-multiple. Null when entry/stop/exit are incomplete. */
   rMultiple?: number | null;
@@ -36,6 +41,32 @@ export interface StatTrade {
   entryTime?: string | null;
   /** Only 'closed' trades contribute to realized stats. */
   status?: string;
+  /** Per-trade carrying costs. Optional: present when the caller wants the
+   *  raw components available alongside the (already-net) `pnl`. */
+  commission?: number | null;
+  swap?: number | null;
+  fees?: number | null;
+}
+
+/**
+ * Derive net P&L from a trade's gross P&L and its carrying costs.
+ * Net = gross − commission − swap − fees. Costs are treated as 0 when null.
+ * Returns null only when gross P&L is null (the trade isn't realized yet) —
+ * null costs on a realized trade still yield a (gross) number, never null.
+ *
+ * This is the single place the net-P&L formula lives, so the form preview, the
+ * trade list, the detail page, and the stats layer all agree.
+ */
+export function computeNetPnl(
+  grossPnl: number | null,
+  commission: number | null,
+  swap: number | null,
+  fees: number | null,
+): number | null {
+  if (grossPnl == null) return null;
+  const costs =
+    (commission ?? 0) + (swap ?? 0) + (fees ?? 0);
+  return grossPnl - costs;
 }
 
 /** Number of trading days per year — the annualization factor for daily Sharpe/Sortino. */
@@ -421,6 +452,40 @@ export function cumulativePnlSeries(trades: ReadonlyArray<StatTrade>): { time: s
     series.push({ time: day, value: cumulative });
   }
   return series;
+}
+
+/**
+ * Default starting capital (account currency) used when a user hasn't set one
+ * in Settings. Kept in lib/stats so every caller shares one source of truth.
+ */
+export const STARTING_BALANCE_DEFAULT = 150;
+
+/**
+ * Account equity curve: starting capital + running cumulative closed-trade P&L,
+ * one point per day. This is the curve the dashboard's equity chart plots — it
+ * represents actual account equity over time, not raw P&L from zero.
+ *
+ * `startingBalance` is the user's configured starting capital (from
+ * user_settings); null falls back to STARTING_BALANCE_DEFAULT.
+ */
+/**
+ * Resolve a stored starting-balance string (from user_settings, nullable) to
+ * the numeric value the UI/stats should use, falling back to the app default
+ * when unset or unparseable.
+ */
+export function resolveStartingBalance(stored: string | null): number {
+  if (stored == null) return STARTING_BALANCE_DEFAULT;
+  const n = Number(stored);
+  return Number.isFinite(n) ? n : STARTING_BALANCE_DEFAULT;
+}
+
+export function equitySeries(
+  trades: ReadonlyArray<StatTrade>,
+  startingBalance: number | null,
+): { time: string; value: number }[] {
+  const base = startingBalance ?? STARTING_BALANCE_DEFAULT;
+  const pnl = cumulativePnlSeries(trades);
+  return pnl.map((pt) => ({ time: pt.time, value: base + pt.value }));
 }
 
 /**

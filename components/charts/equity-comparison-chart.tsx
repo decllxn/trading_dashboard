@@ -138,7 +138,7 @@ export function EquityComparisonChart({
         </div>
 
         {/* Small Stat Row */}
-        <div className="flex items-center gap-6 border-l border-hairline/60 pl-6">
+        <div className="flex flex-wrap items-center gap-6 sm:border-l sm:border-hairline/60 sm:pl-6">
           <div>
             <span className="text-tertiary block text-[9px] uppercase tracking-wider font-display">
               Alpha (Daily)

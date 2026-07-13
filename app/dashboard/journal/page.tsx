@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { JournalClient } from './journal-client';
+import { computeNetPnl } from '@/lib/stats';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +28,7 @@ export default async function JournalPage() {
       .eq('user_id', user.id),
     supabase
       .from('trades')
-      .select('id, instrument, direction, pnl, r_multiple, entry_time')
+      .select('id, instrument, direction, pnl, commission, swap, fees, r_multiple, entry_time')
       .eq('user_id', user.id),
     supabase
       .from('journal_trade_links')
@@ -39,11 +40,26 @@ export default async function JournalPage() {
       .eq('user_id', user.id)
   ]);
 
+  const mappedTrades = (trades || []).map((t) => {
+    const gross = t.pnl != null ? Number(t.pnl) : null;
+    const commission = t.commission != null ? Number(t.commission) : null;
+    const swap = t.swap != null ? Number(t.swap) : null;
+    const fees = t.fees != null ? Number(t.fees) : null;
+    return {
+      id: t.id,
+      instrument: t.instrument,
+      direction: t.direction,
+      pnl: computeNetPnl(gross, commission, swap, fees),
+      r_multiple: t.r_multiple,
+      entry_time: t.entry_time,
+    };
+  });
+
   return (
-    <main className="flex h-[calc(100vh-64px)] flex-col bg-base overflow-hidden p-6">
+    <main className="flex h-full flex-col bg-base overflow-hidden p-4 sm:p-6">
       <JournalClient 
         entries={entries || []} 
-        trades={trades || []} 
+        trades={mappedTrades} 
         links={links || []} 
         emotions={(emotions || []).map(e => e.name)}
       />

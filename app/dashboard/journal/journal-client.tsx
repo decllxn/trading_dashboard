@@ -158,9 +158,9 @@ export function JournalClient({ entries: initialEntries, trades, links: initialL
   };
 
   return (
-    <div className="flex h-full gap-6">
+    <div className="flex h-full flex-col gap-6 lg:flex-row">
       {/* Left Column: Calendar & Search */}
-      <div className="w-80 flex flex-col gap-6 shrink-0">
+      <div className="w-full shrink-0 flex flex-col gap-6 lg:w-80 lg:no-scrollbar lg:overflow-y-auto">
         <h1 className="font-display text-primary text-xl">Journal</h1>
         
         {/* Search */}
@@ -241,7 +241,7 @@ export function JournalClient({ entries: initialEntries, trades, links: initialL
 
         {/* Search Results */}
         {searchResults && (
-          <div className="flex-1 overflow-auto bg-surface border border-hairline rounded-card p-4 flex flex-col gap-3">
+          <div className="no-scrollbar flex-1 overflow-auto bg-surface border border-hairline rounded-card p-4 flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-display text-primary uppercase tracking-wide">
                 Search Results <span className="text-tertiary font-mono num">({searchResults.length})</span>
@@ -274,8 +274,8 @@ export function JournalClient({ entries: initialEntries, trades, links: initialL
 
       {/* Right Column: Editor & Meta */}
       <div className="flex-1 flex flex-col gap-6 min-w-0">
-        <header className="flex items-center justify-between border-b border-hairline pb-4">
-          <h2 className="text-2xl font-display text-primary">
+        <header className="flex flex-col gap-3 border-b border-hairline pb-4 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-xl sm:text-2xl font-display text-primary">
             {format(selectedDate, 'EEEE, MMMM d, yyyy')}
             {isToday(selectedDate) && <span className="ml-3 text-xs uppercase tracking-wide text-accent-signal bg-accent-signal/10 px-2 py-1 rounded">Today</span>}
           </h2>
@@ -296,9 +296,9 @@ export function JournalClient({ entries: initialEntries, trades, links: initialL
           </div>
         </header>
         
-        <div className="flex-1 flex gap-6 overflow-hidden">
+        <div className="flex flex-col flex-1 overflow-hidden lg:flex-row gap-6">
           {/* Editor */}
-          <div className="flex-1 overflow-auto pr-2 pb-6">
+          <div className="no-scrollbar flex-1 overflow-auto pr-2 pb-6 min-h-[300px]">
             <JournalEditor 
               initialContent={currentEntry?.content || null} 
               onSave={handleSave} 
@@ -306,7 +306,7 @@ export function JournalClient({ entries: initialEntries, trades, links: initialL
           </div>
           
           {/* Meta panel (Mistakes & Trades) */}
-          <div className="w-64 shrink-0 flex flex-col gap-6 overflow-y-auto pb-6">
+          <div className="no-scrollbar w-full shrink-0 flex flex-col gap-6 overflow-y-auto pb-6 lg:w-64">
             <section className="bg-surface border border-hairline p-4 rounded-card">
               <h3 className="text-xs font-display text-primary uppercase tracking-wide mb-3">Mistakes</h3>
               {currentEntryId ? (

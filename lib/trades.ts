@@ -177,7 +177,13 @@ export interface TradeRow {
   entryPrice: number | null;
   exitPrice: number | null;
   size: number | null;
+  /** Net P&L (gross − commission − swap − fees). The headline P&L shown everywhere. */
   pnl: number | null;
+  /** Gross P&L before carrying costs. Shown on hover/detail when costs exist. */
+  grossPnl: number | null;
+  commission: number | null;
+  swap: number | null;
+  fees: number | null;
   rMultiple: number | null;
   status: TradeStatus;
   /** ISO string; the row is sorted on this by default. Null sorts last. */

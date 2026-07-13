@@ -40,6 +40,7 @@ test('Twelve Data client fetches EUR/USD daily bars', { skip: !hasTwelveData }, 
 });
 
 test('Caching layer stores and retrieves cached responses', { skip: !db || !canTestMarketData }, async () => {
+  if (!db) throw new Error('Database is not configured.');
   const testSymbol = 'SPY';
   const timeframe = '1D';
   

@@ -42,7 +42,7 @@ export function AccountMenu({ email }: { email: string }) {
       {open ? (
         <div
           role="menu"
-          className="border-hairline bg-surface absolute right-0 top-full mt-1 w-44 rounded-card border p-1"
+          className="border-hairline bg-surface absolute right-0 top-full z-50 mt-1 w-44 rounded-card border p-1"
         >
           <p className="num text-tertiary truncate px-3 py-1.5 text-xs">
             {email}

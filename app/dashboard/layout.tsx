@@ -6,7 +6,6 @@ import {
 } from '@/lib/supabase';
 import { NavRail } from '@/components/shell/nav-rail';
 import { TopBar } from '@/components/shell/top-bar';
-import { cumulativePnlSeries, type StatTrade } from '@/lib/stats';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,35 +44,23 @@ export default async function DashboardLayout({
     redirect('/login');
   }
 
-  const { data: rawTrades } = await supabase
-    .from('trades')
-    .select('pnl, r_multiple, entry_time, status')
-    .eq('user_id', user.id);
-
-  const trades: StatTrade[] = ((rawTrades ?? []) as Array<{
-    pnl: string | null;
-    r_multiple: string | null;
-    entry_time: string | null;
-    status: string;
-  }>).map((t) => ({
-    pnl: t.pnl ? Number(t.pnl) : null,
-    rMultiple: t.r_multiple ? Number(t.r_multiple) : null,
-    entryTime: t.entry_time,
-    status: t.status,
-  }));
-
-  const equityData = cumulativePnlSeries(trades);
-
-  // Persistent app shell: rail + (top bar + content). The 32px signal strip
-  // that belongs under the top bar returns in Phase 5c with live equity data.
+  // Persistent app shell: rail + (top bar + content).
   // The frame persists across all /dashboard/* navigation; only {children}
   // re-renders on route change.
+  //
+  // The shell is height-locked (h-screen overflow-hidden) so the NavRail and
+  // TopBar never scroll — only the <main> scroll container does. min-w-0 on
+  // the columns keeps flex children from pushing the rail when wide tables or
+  // charts overflow. z-40/z-30 establish the persistent layers so floating UI
+  // (tooltips, the account menu) always paint above scrolling content.
   return (
-    <div className="bg-base flex min-h-screen">
+    <div className="bg-base flex h-screen overflow-hidden">
       <NavRail />
-      <div className="flex flex-1 flex-col">
-        <TopBar email={user.email ?? ''} equityData={equityData} />
-        <main className="flex-1">{children}</main>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="z-30 shrink-0">
+          <TopBar email={user.email ?? ''} />
+        </div>
+        <main className="no-scrollbar min-w-0 flex-1 overflow-y-auto">{children}</main>
       </div>
     </div>
   );

@@ -64,7 +64,7 @@ export function NavRail() {
   const pathname = usePathname();
 
   return (
-    <nav className="border-hairline bg-surface flex w-16 shrink-0 flex-col items-center gap-2 border-r py-4">
+    <nav className="border-hairline bg-surface z-40 flex w-16 shrink-0 flex-col items-center gap-2 border-r py-4">
       {NAV_ITEMS.map((item) => {
         const active = item.match(pathname);
         const Icon = item.icon;
@@ -87,7 +87,7 @@ export function NavRail() {
             ) : null}
             <Icon size={18} strokeWidth={1.75} />
             {/* Label-on-hover tooltip. */}
-            <span className="border-hairline bg-surface-raised text-secondary pointer-events-none absolute left-full ml-2 hidden whitespace-nowrap rounded-card border px-2 py-1 text-xs group-hover:block">
+            <span className="border-hairline bg-surface-raised text-secondary pointer-events-none absolute left-full z-50 ml-2 hidden whitespace-nowrap rounded-card border px-2 py-1 text-xs group-hover:block">
               {item.label}
             </span>
           </Link>

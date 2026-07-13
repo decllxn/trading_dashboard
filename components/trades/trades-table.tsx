@@ -175,7 +175,10 @@ function TradeTableRow({ trade }: { trade: TradeRow }) {
       <td className="text-secondary px-3 py-2.5">{capitalize(trade.direction)}</td>
       <td className="num px-3 py-2.5 text-right">{formatPrice(trade.entryPrice)}</td>
       <td className="num px-3 py-2.5 text-right">{formatPrice(trade.exitPrice)}</td>
-      <td className={cn('num px-3 py-2.5 text-right', pnlColorClass(trade.pnl))}>
+      <td
+        className={cn('num px-3 py-2.5 text-right', pnlColorClass(trade.pnl))}
+        title={pnlTitle(trade)}
+      >
         {formatPnlCell(trade.pnl)}
       </td>
       <td className={cn('num px-3 py-2.5 text-right', rColorClass(trade.rMultiple))}>
@@ -220,6 +223,18 @@ function formatPnlCell(value: number | null): string {
   if (value == null) return '—';
   const sign = value > 0 ? '+' : value < 0 ? '−' : '';
   return `${sign}$${Math.abs(value).toFixed(2)}`;
+}
+
+/**
+ * Tooltip text for the P&L cell. When the trade has carrying costs, shows the
+ * gross → net breakdown so the headline net number is auditable on hover.
+ * Returns undefined (no title) when there are no costs.
+ */
+function pnlTitle(trade: TradeRow): string | undefined {
+  const costs = (trade.commission ?? 0) + (trade.swap ?? 0) + (trade.fees ?? 0);
+  if (costs === 0) return undefined;
+  const fmt = (v: number | null) => (v == null ? '—' : `$${v.toFixed(2)}`);
+  return `Gross ${fmt(trade.grossPnl)} − commission ${fmt(trade.commission)} − swap ${fmt(trade.swap)} − fees ${fmt(trade.fees)} = Net ${fmt(trade.pnl)}`;
 }
 
 type Align = 'left' | 'right';

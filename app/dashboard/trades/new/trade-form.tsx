@@ -14,9 +14,12 @@ import {
   STATUS_OPTIONS,
   computeRMultiple,
   formatR,
+  formatPnl,
   parseNumber,
+  pnlColorClass,
   rColorClass,
 } from '@/lib/trades';
+import { computeNetPnl } from '@/lib/stats';
 import type { AssetClass, Direction, Tag, TradeStatus } from '@/db/schema';
 
 /** Shape of the trade data passed in for edit mode. */
@@ -34,6 +37,9 @@ export interface TradeInitialData {
   entryTime: string;
   exitTime: string;
   pnl: string;
+  commission: string;
+  swap: string;
+  fees: string;
   tagIds: ReadonlyArray<string>;
 }
 
@@ -83,6 +89,14 @@ export function TradeForm({ tags, initialData }: TradeFormProps) {
     v.exitPrice ?? initialData?.exitPrice ?? '',
   );
 
+  // Carrying costs — optional, default empty. Drives the live net P&L readout.
+  const [pnl, setPnl] = useState(v.pnl ?? initialData?.pnl ?? '');
+  const [commission, setCommission] = useState(
+    v.commission ?? initialData?.commission ?? '',
+  );
+  const [swap, setSwap] = useState(v.swap ?? initialData?.swap ?? '');
+  const [fees, setFees] = useState(v.fees ?? initialData?.fees ?? '');
+
   const [selectedTags, setSelectedTags] = useState<ReadonlyArray<string>>(
     v.tags ? v.tags.split(',') : (initialData?.tagIds ?? []),
   );
@@ -96,6 +110,19 @@ export function TradeForm({ tags, initialData }: TradeFormProps) {
         direction,
       ),
     [entryPrice, stopPrice, exitPrice, direction],
+  );
+
+  // Net P&L = gross − commission − swap − fees. Live so the user sees the true
+  // realized result as they type the costs in.
+  const netPnlPreview = useMemo(
+    () =>
+      computeNetPnl(
+        parseNumber(pnl),
+        parseNumber(commission),
+        parseNumber(swap),
+        parseNumber(fees),
+      ),
+    [pnl, commission, swap, fees],
   );
 
   const exitOptional = status === 'open';
@@ -270,11 +297,12 @@ export function TradeForm({ tags, initialData }: TradeFormProps) {
         </div>
       </section>
 
-      {/* P&L — manual entry; Phase 5 will compute it from prices × size. */}
+      {/* P&L + carrying costs — gross P&L is manual entry; commission/swap/fees
+          are optional and subtracted to derive net P&L (shown live). */}
       <section className="space-y-4">
         <SectionTitle>Result</SectionTitle>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field id="pnl" label="P&amp;L (account currency)" error={state.errors?.pnl}>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <Field id="pnl" label="Gross P&amp;L (account currency)" error={state.errors?.pnl}>
             <Input
               id="pnl"
               name="pnl"
@@ -283,8 +311,63 @@ export function TradeForm({ tags, initialData }: TradeFormProps) {
               step="any"
               defaultValue={v.pnl ?? initialData?.pnl}
               placeholder={exitOptional ? 'optional' : '0.00'}
+              onChange={(e) => setPnl(e.target.value)}
             />
           </Field>
+          <Field id="commission" label="Commission" error={state.errors?.commission}>
+            <Input
+              id="commission"
+              name="commission"
+              type="number"
+              inputMode="decimal"
+              step="any"
+              min="0"
+              defaultValue={v.commission ?? initialData?.commission}
+              placeholder="0.00"
+              onChange={(e) => setCommission(e.target.value)}
+            />
+          </Field>
+          <Field id="swap" label="Swap / financing" error={state.errors?.swap}>
+            <Input
+              id="swap"
+              name="swap"
+              type="number"
+              inputMode="decimal"
+              step="any"
+              min="0"
+              defaultValue={v.swap ?? initialData?.swap}
+              placeholder="0.00"
+              onChange={(e) => setSwap(e.target.value)}
+            />
+          </Field>
+          <Field id="fees" label="Other fees" error={state.errors?.fees}>
+            <Input
+              id="fees"
+              name="fees"
+              type="number"
+              inputMode="decimal"
+              step="any"
+              min="0"
+              defaultValue={v.fees ?? initialData?.fees}
+              placeholder="0.00"
+              onChange={(e) => setFees(e.target.value)}
+            />
+          </Field>
+
+          {/* Net P&L readout — computed, not typed. */}
+          <div className="space-y-1.5">
+            <Label>Net P&amp;L</Label>
+            <div
+              className={`num flex h-[38px] items-center rounded-card border border-hairline bg-surface-raised px-3 text-sm ${pnlColorClass(
+                netPnlPreview,
+              )}`}
+            >
+              {formatPnl(netPnlPreview)}
+            </div>
+            <p className="text-tertiary text-[10px]">
+              Gross P&amp;L minus commission, swap, and fees.
+            </p>
+          </div>
         </div>
       </section>
 

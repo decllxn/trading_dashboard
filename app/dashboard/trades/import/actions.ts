@@ -49,6 +49,9 @@ interface InsertRow {
   entry_time: string | null;
   exit_time: string | null;
   pnl: string | null;
+  commission: string | null;
+  swap: string | null;
+  fees: string | null;
   r_multiple: string | null;
 }
 
@@ -242,6 +245,9 @@ export async function commitImport(
       entry_time: t.entryTime,
       exit_time: t.exitTime,
       pnl: numOrNull(t.pnl),
+      commission: numOrNull(t.commission),
+      swap: numOrNull(t.swap),
+      fees: numOrNull(t.fees),
       r_multiple: rMultipleOrNull(t),
     }));
 
@@ -287,7 +293,7 @@ export async function commitImport(
 }
 
 /** Decimal columns are sent as strings (Postgres numeric wire format). */
-function numOrNull(value: number | null): string | null {
+function numOrNull(value: number | null | undefined): string | null {
   return value == null ? null : String(value);
 }
 

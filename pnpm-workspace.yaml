@@ -1,4 +1,5 @@
 allowBuilds:
+  '@google/genai': false
   esbuild: false
   protobufjs: false
   unrs-resolver: true

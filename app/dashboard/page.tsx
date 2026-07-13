@@ -12,11 +12,15 @@ import {
   tradeCount,
   winRate,
   cumulativePnlSeries,
+  equitySeries,
+  STARTING_BALANCE_DEFAULT,
   rMultipleDistribution,
   computeRollingStats,
+  computeNetPnl,
 } from '@/lib/stats';
 import { EdgeScoreGauge } from '@/components/dashboard/edge-score-gauge';
 import { StatGrid } from '@/components/dashboard/stat-grid';
+import { EquityCurveChart } from '@/components/charts/equity-curve-chart';
 import { EquityComparisonChart } from '@/components/charts/equity-comparison-chart';
 import { RMultipleHistogram } from '@/components/charts/r-multiple-histogram';
 import { MoodChart } from '@/components/charts/mood-chart';
@@ -41,7 +45,7 @@ export const dynamic = 'force-dynamic';
 export default async function DashboardPage() {
   if (!isSupabaseConfigured()) {
     return (
-      <main className="px-6 py-6">
+      <main className="px-4 py-6 sm:px-6">
         <h1 className="font-display text-primary text-xl">Dashboard</h1>
         <p className="text-secondary mt-2 text-sm">
           Supabase is not configured. Add credentials to{' '}
@@ -61,12 +65,12 @@ export default async function DashboardPage() {
 
   const { data: rawTrades, error } = await supabase
     .from('trades')
-    .select('pnl, r_multiple, entry_time, status')
+    .select('pnl, commission, swap, fees, r_multiple, entry_time, status')
     .eq('user_id', user.id);
 
   if (error) {
     return (
-      <main className="px-6 py-6">
+      <main className="px-4 py-6 sm:px-6">
         <h1 className="font-display text-primary text-xl">Dashboard</h1>
         <div className="border-hairline bg-surface mt-4 rounded-card border px-4 py-3">
           <p className="text-loss text-sm">Couldn&apos;t load trades.</p>
@@ -76,17 +80,40 @@ export default async function DashboardPage() {
     );
   }
 
+  // User's configured starting capital (Settings). Falls back to the app
+  // default when unset so the equity curve always has a baseline.
+  const { data: settingsRow } = await supabase
+    .from('user_settings')
+    .select('starting_balance')
+    .eq('user_id', user.id)
+    .maybeSingle();
+  const startingBalance = settingsRow?.starting_balance
+    ? Number(settingsRow.starting_balance)
+    : STARTING_BALANCE_DEFAULT;
+
   const trades: StatTrade[] = ((rawTrades ?? []) as Array<{
     pnl: string | null;
+    commission: string | null;
+    swap: string | null;
+    fees: string | null;
     r_multiple: string | null;
     entry_time: string | null;
     status: string;
-  }>).map((t) => ({
-    pnl: toNumber(t.pnl),
-    rMultiple: toNumber(t.r_multiple),
-    entryTime: t.entry_time,
-    status: t.status,
-  }));
+  }>).map((t) => {
+    const gross = toNumber(t.pnl);
+    const commission = toNumber(t.commission);
+    const swap = toNumber(t.swap);
+    const fees = toNumber(t.fees);
+    return {
+      pnl: computeNetPnl(gross, commission, swap, fees),
+      rMultiple: toNumber(t.r_multiple),
+      entryTime: t.entry_time,
+      status: t.status,
+      commission,
+      swap,
+      fees,
+    };
+  });
 
   const count = tradeCount(trades);
   const empty = count === 0;
@@ -106,7 +133,9 @@ export default async function DashboardPage() {
   const sortino = sortinoRatio(trades);
   const avgR = averageR(trades);
   
-  const equityData = cumulativePnlSeries(trades);
+  const pnlSeries = cumulativePnlSeries(trades);
+  // Account equity curve: starting capital + running cumulative P&L.
+  const equityData = equitySeries(trades, startingBalance);
   const distributionData = rMultipleDistribution(trades);
 
   // Find start date from trade history or default to 2024-01-01
@@ -123,10 +152,9 @@ export default async function DashboardPage() {
     try {
       spyData = await getMarketData('SPY', '1D', startDate);
       
-      const startingBalance = 100000;
-      userReturnSeries = equityData.map(pt => ({
+      userReturnSeries = pnlSeries.map(pt => ({
         time: pt.time,
-        value: (pt.value / startingBalance) * 100
+        value: startingBalance === 0 ? 0 : (pt.value / startingBalance) * 100
       }));
 
       const spyInitial = spyData.length > 0 ? spyData[0].value : 1;
@@ -136,7 +164,7 @@ export default async function DashboardPage() {
       }));
 
       // Default rolling window length is 30 days
-      const rollingStats = computeRollingStats(equityData, spyData, 30, startingBalance);
+      const rollingStats = computeRollingStats(pnlSeries, spyData, 30, startingBalance);
       currentStats = rollingStats.length > 0 ? rollingStats[rollingStats.length - 1] : null;
     } catch (err) {
       console.error('Error loading market comparison data:', err);
@@ -165,7 +193,7 @@ export default async function DashboardPage() {
   }));
 
   return (
-    <main className="px-6 py-6">
+    <main className="px-4 py-6 sm:px-6">
       <div className="mb-6">
         <h1 className="font-display text-primary text-xl">Dashboard</h1>
         <p className="text-secondary mt-1 text-sm">
@@ -213,6 +241,14 @@ export default async function DashboardPage() {
             </div>
           </section>
         </div>
+      </div>
+
+      <div className="mt-6">
+        <EquityCurveChart
+          data={equityData}
+          startingBalance={startingBalance}
+          empty={empty}
+        />
       </div>
 
       <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -54,7 +54,7 @@ export default async function EditTradePage({
   const { data: trade, error: tradeError } = await supabase
     .from('trades')
     .select(
-      'id, instrument, asset_class, direction, entry_price, exit_price, size, stop_price, target_price, entry_time, exit_time, pnl, status',
+      'id, instrument, asset_class, direction, entry_price, exit_price, size, stop_price, target_price, entry_time, exit_time, pnl, commission, swap, fees, status',
     )
     .eq('id', params.id)
     .single();
@@ -95,11 +95,14 @@ export default async function EditTradePage({
     entryTime: toDateTimeLocal(trade.entry_time),
     exitTime: toDateTimeLocal(trade.exit_time),
     pnl: trade.pnl ?? '',
+    commission: trade.commission ?? '',
+    swap: trade.swap ?? '',
+    fees: trade.fees ?? '',
     tagIds: existingTagIds,
   };
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-8">
+    <main className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
       <header className="mb-8">
         <h1 className="font-display text-primary text-xl">Edit trade</h1>
         <p className="text-secondary mt-1 text-sm">

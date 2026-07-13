@@ -1,6 +1,8 @@
 import { Button } from '@/components/button';
 import { connectBroker } from './actions';
+import { StartingBalanceForm } from './starting-balance-form';
 import { createServerClient } from '@/lib/supabase';
+import { resolveStartingBalance } from '@/lib/stats';
 
 interface SettingsPageProps {
   searchParams: { broker?: string };
@@ -56,12 +58,23 @@ export default async function SettingsPage({
         )
         .order('created_at', { ascending: false })
     : { data: [] };
+  const { data: settingsRow } = supabase
+    ? await supabase
+        .from('user_settings')
+        .select('starting_balance')
+        .maybeSingle()
+    : { data: null };
+  const startingBalanceValue = String(
+    resolveStartingBalance(
+      (settingsRow as { starting_balance: string | null } | null)?.starting_balance ?? null,
+    ),
+  );
   const brokerMessage = searchParams.broker
     ? brokerMessages[searchParams.broker]
     : undefined;
 
   return (
-    <main className="mx-auto w-full max-w-5xl p-6">
+    <main className="mx-auto w-full max-w-5xl p-4 sm:p-6">
       <header className="border-b border-hairline pb-6">
         <p className="text-xs uppercase tracking-wide text-tertiary">
           System configuration
@@ -145,6 +158,21 @@ export default async function SettingsPage({
             No brokerage accounts connected.
           </p>
         )}
+      </section>
+
+      <section className="mt-6 rounded-card border border-hairline bg-surface">
+        <div className="border-b border-hairline p-5">
+          <h2 className="font-display text-lg text-primary">
+            Account
+          </h2>
+          <p className="mt-1 max-w-2xl text-sm text-secondary">
+            Set the capital you started trading with. The dashboard equity curve
+            plots this baseline plus your cumulative closed-trade P&amp;L.
+          </p>
+        </div>
+        <div className="p-5">
+          <StartingBalanceForm defaultValue={startingBalanceValue} />
+        </div>
       </section>
     </main>
   );

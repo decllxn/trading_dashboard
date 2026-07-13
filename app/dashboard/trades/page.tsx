@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { Plus, Upload } from 'lucide-react';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import type { TradeRow, TradeRowTag } from '@/lib/trades';
+import { computeNetPnl } from '@/lib/stats';
 import { TradesTable } from '@/components/trades/trades-table';
 import type {
   AssetClass,
@@ -29,7 +30,7 @@ export const dynamic = 'force-dynamic';
 export default async function TradesPage() {
   if (!isSupabaseConfigured()) {
     return (
-      <main className="px-6 py-6">
+      <main className="px-4 py-6 sm:px-6">
         <h1 className="font-display text-primary text-xl">Trades</h1>
         <p className="text-secondary mt-2 text-sm">
           Supabase is not configured. Add credentials to{' '}
@@ -62,7 +63,7 @@ export default async function TradesPage() {
     supabase
       .from('trades')
       .select(
-        'id, instrument, asset_class, direction, entry_price, exit_price, size, pnl, r_multiple, status, entry_time',
+        'id, instrument, asset_class, direction, entry_price, exit_price, size, pnl, commission, swap, fees, r_multiple, status, entry_time',
       )
       .eq('user_id', user.id)
       .order('entry_time', { ascending: false, nullsFirst: false }),
@@ -81,7 +82,7 @@ export default async function TradesPage() {
   // a real error state so a misquery is diagnosable.
   if (tradesError) {
     return (
-      <main className="px-6 py-6">
+      <main className="px-4 py-6 sm:px-6">
         <h1 className="font-display text-primary text-xl">Trades</h1>
         <div className="border-hairline bg-surface mt-4 rounded-card border px-4 py-3">
           <p className="text-loss text-sm">Couldn&apos;t load trades.</p>
@@ -115,28 +116,40 @@ export default async function TradesPage() {
   }
 
   const rows: TradeRow[] = ((rawTrades ?? []) as unknown as RawTradeRow[]).map(
-    (t) => ({
-      id: t.id,
-      instrument: t.instrument,
-      assetClass: t.asset_class as AssetClass,
-      direction: t.direction as Direction,
-      entryPrice: toNumber(t.entry_price),
-      exitPrice: toNumber(t.exit_price),
-      size: toNumber(t.size),
-      pnl: toNumber(t.pnl),
-      rMultiple: toNumber(t.r_multiple),
-      status: t.status as TradeStatus,
-      entryTime: t.entry_time,
-      tags: (tagIdsByTradeId.get(t.id) ?? [])
-        .map((tagId) => tagNameById.get(tagId))
-        .filter((tag): tag is TradeRowTag => tag != null)
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    }),
+    (t) => {
+      const grossPnl = toNumber(t.pnl);
+      const commission = toNumber(t.commission);
+      const swap = toNumber(t.swap);
+      const fees = toNumber(t.fees);
+      return {
+        id: t.id,
+        instrument: t.instrument,
+        assetClass: t.asset_class as AssetClass,
+        direction: t.direction as Direction,
+        entryPrice: toNumber(t.entry_price),
+        exitPrice: toNumber(t.exit_price),
+        size: toNumber(t.size),
+        grossPnl,
+        commission,
+        swap,
+        fees,
+        // Headline P&L is net (gross − costs). Falls back to gross when no
+        // costs are recorded, so existing rows are unaffected.
+        pnl: computeNetPnl(grossPnl, commission, swap, fees),
+        rMultiple: toNumber(t.r_multiple),
+        status: t.status as TradeStatus,
+        entryTime: t.entry_time,
+        tags: (tagIdsByTradeId.get(t.id) ?? [])
+          .map((tagId) => tagNameById.get(tagId))
+          .filter((tag): tag is TradeRowTag => tag != null)
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      };
+    },
   );
 
   return (
-    <main className="px-6 py-6">
-      <div className="mb-6 flex items-center justify-between">
+    <main className="px-4 py-6 sm:px-6">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="font-display text-primary text-xl">Trades</h1>
           <p className="text-secondary mt-1 text-sm">
@@ -188,6 +201,9 @@ interface RawTradeRow {
   exit_price: string | null;
   size: string | null;
   pnl: string | null;
+  commission: string | null;
+  swap: string | null;
+  fees: string | null;
   r_multiple: string | null;
   status: string;
   entry_time: string | null;

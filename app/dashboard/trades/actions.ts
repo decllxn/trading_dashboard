@@ -36,6 +36,9 @@ type TradeField =
   | 'entryTime'
   | 'exitTime'
   | 'pnl'
+  | 'commission'
+  | 'swap'
+  | 'fees'
   | 'status'
   | 'tags';
 
@@ -96,6 +99,12 @@ function validateTrade(formData: FormData) {
   values.exitTime = String(formData.get('exitTime') ?? '');
   const pnl = parseNumber(String(formData.get('pnl') ?? ''));
   values.pnl = String(formData.get('pnl') ?? '');
+  const commission = parseNumber(String(formData.get('commission') ?? ''));
+  values.commission = String(formData.get('commission') ?? '');
+  const swap = parseNumber(String(formData.get('swap') ?? ''));
+  values.swap = String(formData.get('swap') ?? '');
+  const fees = parseNumber(String(formData.get('fees') ?? ''));
+  values.fees = String(formData.get('fees') ?? '');
   const entryTime = parseDateTimeLocal(String(formData.get('entryTime') ?? ''));
   values.entryTime = String(formData.get('entryTime') ?? '');
 
@@ -103,6 +112,11 @@ function validateTrade(formData: FormData) {
     if (exitPrice == null) errors.exitPrice = 'Exit price is required for a closed trade.';
     if (exitTime == null) errors.exitTime = 'Exit time is required for a closed trade.';
   }
+
+  // Costs are optional but, when provided, must be non-negative magnitudes.
+  if (commission != null && commission < 0) errors.commission = 'Commission must be zero or positive.';
+  if (swap != null && swap < 0) errors.swap = 'Swap must be zero or positive.';
+  if (fees != null && fees < 0) errors.fees = 'Fees must be zero or positive.';
 
   return {
     errors,
@@ -119,6 +133,9 @@ function validateTrade(formData: FormData) {
       exitPrice,
       exitTime,
       pnl,
+      commission,
+      swap,
+      fees,
       entryTime,
       tagIds: Array.from(new Set(formData.getAll('tags').map((t) => String(t)))),
     },
@@ -161,6 +178,9 @@ export async function createTrade(
       entry_time: data.entryTime,
       exit_time: data.exitTime,
       pnl: data.pnl?.toString() ?? null,
+      commission: data.commission?.toString() ?? null,
+      swap: data.swap?.toString() ?? null,
+      fees: data.fees?.toString() ?? null,
       r_multiple: rMultiple != null ? String(rMultiple) : null,
     })
     .select('id')
@@ -208,6 +228,9 @@ export async function updateTrade(
       entry_time: data.entryTime,
       exit_time: data.exitTime,
       pnl: data.pnl?.toString() ?? null,
+      commission: data.commission?.toString() ?? null,
+      swap: data.swap?.toString() ?? null,
+      fees: data.fees?.toString() ?? null,
       r_multiple: rMultiple != null ? String(rMultiple) : null,
     })
     .eq('id', tradeId);

@@ -33,7 +33,10 @@ export type TradesField =
   | 'target_price'
   | 'entry_time'
   | 'exit_time'
-  | 'pnl';
+  | 'pnl'
+  | 'commission'
+  | 'swap'
+  | 'fees';
 
 /** Fields whose value must resolve to a valid enum, else the row is skipped. */
 export const ENUM_FIELDS: ReadonlyArray<TradesField> = [
@@ -50,6 +53,9 @@ export const NUMERIC_FIELDS: ReadonlyArray<TradesField> = [
   'stop_price',
   'target_price',
   'pnl',
+  'commission',
+  'swap',
+  'fees',
 ];
 
 /** Timestamp fields — parsed leniently, unparseable → null (not a skip). */
@@ -147,6 +153,21 @@ const FIELD_DEFS: ReadonlyArray<FieldDef> = [
     field: 'pnl',
     label: 'P&L',
     synonyms: ['pnl', 'p and l', 'profit loss', 'profit', 'gain loss', 'realized pnl', 'realized', 'net pnl', 'net'],
+  },
+  {
+    field: 'commission',
+    label: 'Commission',
+    synonyms: ['commission', 'commissions', 'broker fee', 'brokerage', 'brokerage fee', 'comm'],
+  },
+  {
+    field: 'swap',
+    label: 'Swap / financing',
+    synonyms: ['swap', 'swap fee', 'financing', 'financing fee', 'overnight fee', 'rollover', 'rollover fee'],
+  },
+  {
+    field: 'fees',
+    label: 'Other fees',
+    synonyms: ['fees', 'fee', 'other fees', 'transaction fee', 'exchange fee', 'regulatory fee', 'nfa fee', 'sec fee'],
   },
   {
     field: 'entry_time',
@@ -414,6 +435,9 @@ export interface BuiltTrade {
   entryTime: string | null;
   exitTime: string | null;
   pnl: number | null;
+  commission?: number | null;
+  swap?: number | null;
+  fees?: number | null;
 }
 
 /** Reason a row was skipped during build — surfaced in the import summary. */
@@ -554,6 +578,9 @@ export function buildTradesFromCsv(
       stopPrice: numericValue(row, numericCols.stop_price),
       targetPrice: numericValue(row, numericCols.target_price),
       pnl: numericValue(row, numericCols.pnl),
+      commission: numericValue(row, numericCols.commission),
+      swap: numericValue(row, numericCols.swap),
+      fees: numericValue(row, numericCols.fees),
       entryTime: timestampValue(row, tsCols.entry_time),
       exitTime: timestampValue(row, tsCols.exit_time),
     });

@@ -114,7 +114,17 @@ export const trades = pgTable('trades', {
   exitTime: timestamp('exit_time', { withTimezone: true }),
 
   // Signed P&L in account currency. UI gain/loss color derives from the sign.
+  // This is the GROSS P&L the user enters (price × size direction). Net P&L
+  // (gross − commission − swap − fees) is derived at read time so the
+  // components stay auditable. See lib/stats.ts computeNetPnl.
   pnl: numeric('pnl', { precision: 20, scale: 8 }),
+
+  // Per-trade carrying costs, all in account currency and nullable so existing
+  // rows (and manual entries that omit them) are unaffected. Each is a
+  // non-negative magnitude; net P&L subtracts all three.
+  commission: numeric('commission', { precision: 20, scale: 8 }),
+  swap: numeric('swap', { precision: 20, scale: 8 }),
+  fees: numeric('fees', { precision: 20, scale: 8 }),
 
   // R-multiple (reward-to-risk). 4 fractional digits is plenty for +/-X.XXXX R.
   rMultiple: numeric('r_multiple', { precision: 10, scale: 4 }),
@@ -380,6 +390,11 @@ export const userSettings = pgTable('user_settings', {
   chartSessionsEnabled: boolean('chart_sessions_enabled')
     .notNull()
     .default(false),
+  // Account starting capital in account currency. The equity curve is
+  // starting_balance + cumulative closed-trade P&L. Nullable so existing rows
+  // (and accounts created before this column) fall back to the app default
+  // (STARTING_BALANCE_DEFAULT in lib/stats.ts) rather than forcing a value.
+  startingBalance: numeric('starting_balance', { precision: 20, scale: 8 }),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),

@@ -20,7 +20,7 @@ export const dynamic = 'force-dynamic';
 export default async function ImportCsvPage() {
   if (!isSupabaseConfigured()) {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-8">
+      <main className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
         <h1 className="font-display text-primary text-xl">Import trades</h1>
         <p className="text-secondary mt-2 text-sm">
           Supabase is not configured. Add credentials to{' '}
@@ -46,7 +46,7 @@ export default async function ImportCsvPage() {
   const acceptPdf = isAnthropicConfigured();
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-8">
+    <main className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
       <Link
         href="/dashboard/trades"
         className="text-tertiary hover:text-secondary inline-flex items-center gap-1 text-xs transition-colors duration-150"

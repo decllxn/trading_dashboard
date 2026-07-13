@@ -2,7 +2,8 @@ import { notFound, redirect } from 'next/navigation';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { TradeChart } from '@/components/charts/trade-chart';
 import type { ChartAnnotation } from '@/db/schema';
-import { formatPrice, formatR, pnlColorClass, rColorClass } from '@/lib/trades';
+import { formatPrice, formatR, formatPnl, pnlColorClass, rColorClass } from '@/lib/trades';
+import { computeNetPnl } from '@/lib/stats';
 import { cn } from '@/lib/utils';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
@@ -66,16 +67,23 @@ export default async function TradeDetailPage({
 
   const sessionsEnabled = userSettings?.chart_sessions_enabled ?? false;
 
+  const grossPnl = trade.pnl != null ? Number(trade.pnl) : null;
+  const commission = trade.commission != null ? Number(trade.commission) : null;
+  const swap = trade.swap != null ? Number(trade.swap) : null;
+  const fees = trade.fees != null ? Number(trade.fees) : null;
+  const netPnl = computeNetPnl(grossPnl, commission, swap, fees);
+  const hasCosts = (commission ?? 0) + (swap ?? 0) + (fees ?? 0) > 0;
+
   return (
-    <main className="flex h-[calc(100vh-64px)] flex-col">
-      <header className="flex items-center gap-4 px-6 py-4 border-b border-hairline">
+    <main className="flex h-full flex-col">
+      <header className="flex flex-wrap items-center gap-4 border-b border-hairline px-4 py-4 sm:px-6">
         <Link
           href="/dashboard/trades"
           className="text-secondary hover:text-primary transition-colors"
         >
           <ArrowLeft size={16} />
         </Link>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <h1 className="font-display text-primary text-lg">
             {trade.instrument}
           </h1>
@@ -87,13 +95,21 @@ export default async function TradeDetailPage({
           </span>
         </div>
         
-        <div className="ml-auto flex items-center gap-4 text-sm font-mono">
+        <div className="ml-auto flex flex-wrap items-center gap-4 text-sm font-mono">
           <div className="flex items-center gap-2">
-            <span className="text-tertiary">P&L</span>
-            <span className={cn('text-right', pnlColorClass(Number(trade.pnl)))}>
-              {trade.pnl != null ? `$${Math.abs(Number(trade.pnl)).toFixed(2)}` : '—'}
+            <span className="text-tertiary">Net P&amp;L</span>
+            <span className={cn('num text-right', pnlColorClass(netPnl))}>
+              {formatPnl(netPnl)}
             </span>
           </div>
+          {hasCosts ? (
+            <div className="flex items-center gap-2">
+              <span className="text-tertiary">Gross</span>
+              <span className={cn('num text-right', pnlColorClass(grossPnl))}>
+                {formatPnl(grossPnl)}
+              </span>
+            </div>
+          ) : null}
           <div className="flex items-center gap-2">
             <span className="text-tertiary">R</span>
             <span className={cn('text-right', rColorClass(Number(trade.r_multiple)))}>
@@ -103,9 +119,9 @@ export default async function TradeDetailPage({
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex flex-col flex-1 overflow-hidden lg:flex-row">
         {/* Main Chart Area */}
-        <div className="flex-1 p-4 bg-base overflow-hidden border-r border-hairline">
+        <div className="min-h-[300px] flex-1 overflow-hidden border-b border-hairline bg-base p-2 sm:p-4 lg:border-b-0 lg:border-r">
           <TradeChart 
             trade={trade as any} 
             initialAnnotations={annotations} 
@@ -113,8 +129,22 @@ export default async function TradeDetailPage({
           />
         </div>
         
-        {/* Sidebar: Linked Journal Entries */}
-        <div className="w-80 shrink-0 bg-surface flex flex-col overflow-y-auto">
+        {/* Sidebar: Cost breakdown + Linked Journal Entries */}
+        <div className="no-scrollbar w-full shrink-0 overflow-y-auto bg-surface lg:w-80 lg:max-h-none max-h-[40vh]">
+          {hasCosts ? (
+            <div className="p-4 border-b border-hairline">
+              <h2 className="font-display text-primary text-sm uppercase tracking-wide mb-3">Cost Breakdown</h2>
+              <dl className="space-y-2 text-sm">
+                <CostRow label="Gross P&L" value={formatPnl(grossPnl)} valueClass={pnlColorClass(grossPnl)} />
+                {commission ? <CostRow label="Commission" value={`−$${commission.toFixed(2)}`} /> : null}
+                {swap ? <CostRow label="Swap / financing" value={`−$${swap.toFixed(2)}`} /> : null}
+                {fees ? <CostRow label="Other fees" value={`−$${fees.toFixed(2)}`} /> : null}
+                <div className="border-t border-hairline pt-2 mt-2">
+                  <CostRow label="Net P&L" value={formatPnl(netPnl)} valueClass={pnlColorClass(netPnl)} bold />
+                </div>
+              </dl>
+            </div>
+          ) : null}
           <div className="p-4 border-b border-hairline">
              <h2 className="font-display text-primary text-sm uppercase tracking-wide">Linked Journal Entries</h2>
           </div>
@@ -138,5 +168,21 @@ export default async function TradeDetailPage({
         </div>
       </div>
     </main>
+  );
+}
+
+interface CostRowProps {
+  label: string;
+  value: string;
+  valueClass?: string;
+  bold?: boolean;
+}
+
+function CostRow({ label, value, valueClass, bold }: CostRowProps) {
+  return (
+    <div className="flex items-center justify-between">
+      <dt className={cn('text-secondary text-xs', bold && 'text-primary font-medium')}>{label}</dt>
+      <dd className={cn('num text-right text-xs', bold && 'text-sm font-semibold', valueClass)}>{value}</dd>
+    </div>
   );
 }
