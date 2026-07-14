@@ -24,7 +24,7 @@ export default async function JournalPage() {
   const [{ data: entries }, { data: trades }, { data: links }, { data: emotions }] = await Promise.all([
     supabase
       .from('journal_entries')
-      .select('id, date, content, mood, mistakes')
+      .select('id, date, content, text_content, mood, mistakes')
       .eq('user_id', user.id),
     supabase
       .from('trades')

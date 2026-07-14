@@ -143,6 +143,11 @@ export const trades = pgTable('trades', {
     { onDelete: 'set null' },
   ),
 
+  dailyPdArray: text('daily_pd_array'),
+  oneHourPdArray: text('one_hour_pd_array'),
+  thirtyMinutePdArray: text('thirty_minute_pd_array'),
+  images: jsonb('images').$type<string[]>().default([]),
+
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),

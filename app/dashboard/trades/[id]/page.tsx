@@ -7,6 +7,7 @@ import { computeNetPnl } from '@/lib/stats';
 import { cn } from '@/lib/utils';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+import { ScreenshotGallery } from '@/components/trades/screenshot-gallery';
 
 export const dynamic = 'force-dynamic';
 
@@ -120,13 +121,20 @@ export default async function TradeDetailPage({
       </header>
 
       <div className="flex flex-col flex-1 overflow-hidden lg:flex-row">
-        {/* Main Chart Area */}
-        <div className="min-h-[300px] flex-1 overflow-hidden border-b border-hairline bg-base p-2 sm:p-4 lg:border-b-0 lg:border-r">
-          <TradeChart 
-            trade={trade as any} 
-            initialAnnotations={annotations} 
-            sessionsEnabled={sessionsEnabled} 
-          />
+        {/* Main Chart Area + Screenshots */}
+        <div className="flex-1 overflow-y-auto bg-base p-2 sm:p-4 lg:border-r border-b border-hairline lg:border-b-0">
+          <div className="min-h-[350px] sm:min-h-[450px]">
+            <TradeChart 
+              trade={trade as any} 
+              initialAnnotations={annotations} 
+              sessionsEnabled={sessionsEnabled} 
+            />
+          </div>
+          {trade.images && trade.images.length > 0 && (
+            <div className="border-t border-hairline pt-6 mt-6 pb-6">
+              <ScreenshotGallery images={trade.images} />
+            </div>
+          )}
         </div>
         
         {/* Sidebar: Cost breakdown + Linked Journal Entries */}
@@ -142,6 +150,32 @@ export default async function TradeDetailPage({
                 <div className="border-t border-hairline pt-2 mt-2">
                   <CostRow label="Net P&L" value={formatPnl(netPnl)} valueClass={pnlColorClass(netPnl)} bold />
                 </div>
+              </dl>
+            </div>
+          ) : null}
+
+          {(trade.daily_pd_array || trade.one_hour_pd_array || trade.thirty_minute_pd_array) ? (
+            <div className="p-4 border-b border-hairline">
+              <h2 className="font-display text-primary text-sm uppercase tracking-wide mb-3">Market Context</h2>
+              <dl className="space-y-2 text-sm font-mono">
+                {trade.daily_pd_array ? (
+                  <div className="flex items-center justify-between">
+                    <dt className="text-secondary text-xs">Daily PD Array</dt>
+                    <dd className="text-primary text-right text-xs font-medium">{trade.daily_pd_array}</dd>
+                  </div>
+                ) : null}
+                {trade.one_hour_pd_array ? (
+                  <div className="flex items-center justify-between">
+                    <dt className="text-secondary text-xs">1 Hr PD Array</dt>
+                    <dd className="text-primary text-right text-xs font-medium">{trade.one_hour_pd_array}</dd>
+                  </div>
+                ) : null}
+                {trade.thirty_minute_pd_array ? (
+                  <div className="flex items-center justify-between">
+                    <dt className="text-secondary text-xs">30 Min PD Array</dt>
+                    <dd className="text-primary text-right text-xs font-medium">{trade.thirty_minute_pd_array}</dd>
+                  </div>
+                ) : null}
               </dl>
             </div>
           ) : null}

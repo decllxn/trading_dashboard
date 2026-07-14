@@ -19,6 +19,7 @@ interface JournalEntryData {
   id: string;
   date: string;
   content: any;
+  text_content?: string | null;
   mood: string | null;
   mistakes: string[];
 }
@@ -83,25 +84,75 @@ export function JournalClient({ entries: initialEntries, trades, links: initialL
     }
   }, [currentDate, viewMode]);
 
+  // Helper to ensure TipTap content is a 100% plain object for Server Actions
+  const sanitizeContent = (val: any) => {
+    if (!val) return null;
+    try {
+      return JSON.parse(JSON.stringify(val));
+    } catch {
+      return null;
+    }
+  };
+
   const handleSave = async (content: any, textContent: string) => {
+    const currentMood = currentEntry?.mood || null;
+    const currentMistakes = currentEntry?.mistakes || [];
+    const plainContent = sanitizeContent(content);
     const res = await saveJournalEntry(
       selectedDateStr,
-      content,
+      plainContent,
       textContent,
-      currentEntry?.mood || null,
-      currentEntry?.mistakes || []
+      currentMood,
+      currentMistakes
     );
-    if (res.id && !currentEntryId) {
-      setEntries(prev => [...prev, { id: res.id, date: selectedDateStr, content, mood: null, mistakes: [] }]);
-    } else {
-      setEntries(prev => prev.map(e => e.id === currentEntryId ? { ...e, content } : e));
+    if (res.error) return;
+
+    const entryId = res.id;
+    if (entryId) {
+      if (!currentEntryId) {
+        setEntries(prev => [...prev, { id: entryId, date: selectedDateStr, content: plainContent, mood: currentMood, mistakes: currentMistakes }]);
+      } else {
+        setEntries(prev => prev.map(e => e.id === currentEntryId ? { ...e, content: plainContent } : e));
+      }
+
+      // Sync matched day's trades to local links state
+      const newLinks = tradesOnDate.map(t => ({
+        journal_entry_id: entryId,
+        trade_id: t.id
+      }));
+      setLinks(prev => [
+        ...prev.filter(l => l.journal_entry_id !== entryId),
+        ...newLinks
+      ]);
     }
   };
 
   const handleMoodChange = async (mood: string) => {
     const newMood = mood === 'none' ? null : mood;
-    setEntries(prev => prev.map(e => e.id === currentEntryId ? { ...e, mood: newMood } : e));
-    await saveJournalEntry(selectedDateStr, currentEntry?.content || {}, '', newMood, currentEntry?.mistakes || []);
+    if (!currentEntryId) {
+      const res = await saveJournalEntry(selectedDateStr, null, '', newMood, []);
+      if (res.id) {
+        setEntries(prev => [...prev, { id: res.id!, date: selectedDateStr, content: null, mood: newMood, mistakes: [] }]);
+        const newLinks = tradesOnDate.map(t => ({
+          journal_entry_id: res.id!,
+          trade_id: t.id
+        }));
+        setLinks(prev => [...prev, ...newLinks]);
+      }
+    } else {
+      setEntries(prev => prev.map(e => e.id === currentEntryId ? { ...e, mood: newMood } : e));
+      const res = await saveJournalEntry(selectedDateStr, sanitizeContent(currentEntry?.content), '', newMood, currentEntry?.mistakes || []);
+      if (res.id) {
+        const newLinks = tradesOnDate.map(t => ({
+          journal_entry_id: res.id!,
+          trade_id: t.id
+        }));
+        setLinks(prev => [
+          ...prev.filter(l => l.journal_entry_id !== res.id),
+          ...newLinks
+        ]);
+      }
+    }
   };
 
   const handleMistakeToggle = async (mistake: string) => {
@@ -110,8 +161,30 @@ export function JournalClient({ entries: initialEntries, trades, links: initialL
       ? currentMistakes.filter((m: string) => m !== mistake)
       : [...currentMistakes, mistake];
     
-    setEntries(prev => prev.map(e => e.id === currentEntryId ? { ...e, mistakes: newMistakes } : e));
-    await saveJournalEntry(selectedDateStr, currentEntry?.content || {}, '', currentEntry?.mood || null, newMistakes);
+    if (!currentEntryId) {
+      const res = await saveJournalEntry(selectedDateStr, null, '', null, newMistakes);
+      if (res.id) {
+        setEntries(prev => [...prev, { id: res.id!, date: selectedDateStr, content: null, mood: null, mistakes: newMistakes }]);
+        const newLinks = tradesOnDate.map(t => ({
+          journal_entry_id: res.id!,
+          trade_id: t.id
+        }));
+        setLinks(prev => [...prev, ...newLinks]);
+      }
+    } else {
+      setEntries(prev => prev.map(e => e.id === currentEntryId ? { ...e, mistakes: newMistakes } : e));
+      const res = await saveJournalEntry(selectedDateStr, sanitizeContent(currentEntry?.content), '', currentEntry?.mood || null, newMistakes);
+      if (res.id) {
+        const newLinks = tradesOnDate.map(t => ({
+          journal_entry_id: res.id!,
+          trade_id: t.id
+        }));
+        setLinks(prev => [
+          ...prev.filter(l => l.journal_entry_id !== res.id),
+          ...newLinks
+        ]);
+      }
+    }
   };
 
   const toggleTradeLink = async (tradeId: string) => {
@@ -215,7 +288,15 @@ export function JournalClient({ entries: initialEntries, trades, links: initialL
               ))}
               {calendarDays.days.map((day) => {
                 const dayStr = format(day, 'yyyy-MM-dd');
-                const hasEntry = entries.some(e => e.date === dayStr);
+                const entry = entries.find(e => e.date === dayStr);
+                const hasSavedContent = !!(
+                  entry &&
+                  (
+                    (entry.text_content && entry.text_content.trim().length > 0) ||
+                    entry.mood ||
+                    (entry.mistakes && entry.mistakes.length > 0)
+                  )
+                );
                 const isSel = isSameDay(day, selectedDate);
                 
                 return (
@@ -229,7 +310,7 @@ export function JournalClient({ entries: initialEntries, trades, links: initialL
                     )}
                   >
                     {format(day, 'd')}
-                    {hasEntry && (
+                    {hasSavedContent && (
                       <span className="absolute bottom-1 w-1 h-1 bg-accent-signal rounded-full" />
                     )}
                   </button>
@@ -281,17 +362,28 @@ export function JournalClient({ entries: initialEntries, trades, links: initialL
           </h2>
           
           <div className="flex items-center gap-4">
-             <div className="flex items-center gap-2">
-               <span className="text-xs text-tertiary uppercase tracking-wide">Mood</span>
-               <select 
-                  value={currentEntry?.mood || 'none'}
-                  onChange={(e) => handleMoodChange(e.target.value)}
-                  disabled={!currentEntryId}
-                  className="bg-surface border border-hairline rounded text-sm text-primary p-1.5 focus:outline-none focus:border-accent-signal"
-               >
-                 <option value="none">—</option>
-                 {emotions.map(e => <option key={e} value={e}>{e}</option>)}
-               </select>
+             <div className="flex items-center gap-3">
+               <span className="text-xs text-tertiary uppercase tracking-wide font-sans">Mood</span>
+               <div className="flex flex-wrap items-center gap-1.5">
+                 {emotions.map(moodOption => {
+                   const isSelected = currentEntry?.mood === moodOption;
+                   return (
+                     <button
+                       key={moodOption}
+                       type="button"
+                       onClick={() => handleMoodChange(isSelected ? 'none' : moodOption)}
+                       className={cn(
+                         "px-2.5 py-1 text-xs border rounded transition-colors duration-150 capitalize",
+                         isSelected 
+                           ? "border-accent-signal text-accent-signal bg-accent-signal/10 font-medium" 
+                           : "border-hairline text-secondary hover:text-primary hover:border-primary bg-surface"
+                       )}
+                     >
+                       {moodOption}
+                     </button>
+                   );
+                 })}
+               </div>
              </div>
           </div>
         </header>
@@ -300,6 +392,7 @@ export function JournalClient({ entries: initialEntries, trades, links: initialL
           {/* Editor */}
           <div className="no-scrollbar flex-1 overflow-auto pr-2 pb-6 min-h-[300px]">
             <JournalEditor 
+              key={selectedDateStr}
               initialContent={currentEntry?.content || null} 
               onSave={handleSave} 
             />
@@ -309,60 +402,74 @@ export function JournalClient({ entries: initialEntries, trades, links: initialL
           <div className="no-scrollbar w-full shrink-0 flex flex-col gap-6 overflow-y-auto pb-6 lg:w-64">
             <section className="bg-surface border border-hairline p-4 rounded-card">
               <h3 className="text-xs font-display text-primary uppercase tracking-wide mb-3">Mistakes</h3>
-              {currentEntryId ? (
-                <div className="flex flex-col gap-2">
-                  {MISTAKES_LIST.map(mistake => (
-                    <label key={mistake} className="flex items-center gap-2 cursor-pointer group">
-                      <div className={cn(
-                        "w-4 h-4 rounded border flex items-center justify-center transition-colors",
-                        currentEntry?.mistakes?.includes(mistake) ? "bg-loss border-loss text-base" : "border-hairline bg-base group-hover:border-primary"
-                      )}>
-                        {currentEntry?.mistakes?.includes(mistake) && (
-                          <svg viewBox="0 0 14 14" fill="none" className="w-3 h-3 text-[#0B0D10]"><path d="M3 7.5L5.5 10L11 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                        )}
-                      </div>
-                      <span className="text-sm text-secondary group-hover:text-primary transition-colors">{mistake}</span>
-                    </label>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-tertiary">Type an entry first to unlock tagging.</p>
-              )}
+              <div className="flex flex-col gap-2">
+                {MISTAKES_LIST.map(mistake => (
+                  <label key={mistake} className="flex items-center gap-2 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={currentEntry?.mistakes?.includes(mistake) || false}
+                      onChange={() => handleMistakeToggle(mistake)}
+                      className="hidden"
+                    />
+                    <div className={cn(
+                      "w-4 h-4 rounded border flex items-center justify-center transition-colors",
+                      currentEntry?.mistakes?.includes(mistake) ? "bg-accent-signal border-accent-signal text-black" : "border-hairline bg-base group-hover:border-primary"
+                    )}>
+                      {currentEntry?.mistakes?.includes(mistake) && (
+                        <svg viewBox="0 0 14 14" fill="none" className="w-3 h-3 text-[#0B0D10]"><path d="M3 7.5L5.5 10L11 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      )}
+                    </div>
+                    <span className="text-sm text-secondary group-hover:text-primary transition-colors">{mistake}</span>
+                  </label>
+                ))}
+              </div>
             </section>
 
             <section className="bg-surface border border-hairline p-4 rounded-card flex-1 flex flex-col min-h-[200px]">
               <h3 className="text-xs font-display text-primary uppercase tracking-wide mb-3">Linked Trades</h3>
-              {currentEntryId ? (
-                <div className="flex flex-col gap-2 overflow-y-auto flex-1">
-                  {tradesOnDate.length === 0 ? (
-                    <p className="text-xs text-tertiary">No trades logged on this date.</p>
-                  ) : (
-                    tradesOnDate.map(trade => {
-                      const pnlNum = Number(trade.pnl);
-                      const isGain = pnlNum >= 0;
-                      return (
-                        <div 
-                          key={trade.id} 
-                          className={cn(
-                            "flex items-center justify-between p-2 rounded border transition-colors cursor-pointer shrink-0",
-                            linkedTradeIds.has(trade.id) ? "bg-accent-signal/10 border-accent-signal" : "bg-base border-hairline hover:border-primary"
-                          )}
-                          onClick={() => toggleTradeLink(trade.id)}
-                        >
-                          <div>
-                            <p className="text-sm font-medium text-primary">{trade.instrument}</p>
-                            <p className="text-xs text-secondary capitalize">{trade.direction}</p>
-                          </div>
-                          <div className={cn("text-right text-sm num", isGain ? "text-gain" : "text-loss")}>
-                             {isGain ? '+' : '−'}{formatPrice(Math.abs(pnlNum))}
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
+              {tradesOnDate.length === 0 ? (
+                <p className="text-xs text-tertiary">No trades logged on this date.</p>
               ) : (
-                <p className="text-xs text-tertiary">Type an entry first to link trades.</p>
+                <div className="flex flex-col gap-2 overflow-y-auto flex-1">
+                  {tradesOnDate.map(trade => {
+                    const pnlNum = Number(trade.pnl);
+                    const isGain = pnlNum >= 0;
+                    const isLinked = linkedTradeIds.has(trade.id);
+                    return (
+                      <div 
+                        key={trade.id} 
+                        className={cn(
+                          "flex items-center justify-between p-2 rounded border transition-colors cursor-pointer shrink-0",
+                          isLinked ? "bg-accent-signal/10 border-accent-signal" : "bg-base border-hairline hover:border-primary",
+                          !currentEntryId && "opacity-60 hover:opacity-100"
+                        )}
+                        onClick={async () => {
+                          if (!currentEntryId) {
+                            const res = await saveJournalEntry(selectedDateStr, null, '', null, []);
+                            if (res.id) {
+                              setEntries(prev => [...prev, { id: res.id!, date: selectedDateStr, content: null, mood: null, mistakes: [] }]);
+                              const newLinks = tradesOnDate.map(t => ({
+                                journal_entry_id: res.id!,
+                                trade_id: t.id
+                              }));
+                              setLinks(prev => [...prev, ...newLinks]);
+                            }
+                          } else {
+                            toggleTradeLink(trade.id);
+                          }
+                        }}
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-primary">{trade.instrument}</p>
+                          <p className="text-xs text-secondary capitalize">{trade.direction}</p>
+                        </div>
+                        <div className={cn("text-right text-sm num", isGain ? "text-gain" : "text-loss")}>
+                           {isGain ? '+' : '−'}{formatPrice(Math.abs(pnlNum))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </section>
           </div>

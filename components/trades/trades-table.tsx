@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowDown, ArrowUp, ArrowUpDown, Pencil } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Pencil, Camera } from 'lucide-react';
 import {
   capitalize,
   DEFAULT_FILTERS,
@@ -22,6 +22,7 @@ import {
 import { cn } from '@/lib/utils';
 import { TradeFiltersBar } from './trade-filters';
 import type { Tag } from '@/db/schema';
+import { TradeDetailModal } from './trade-detail-modal';
 
 interface TradesTableProps {
   /** All of the user's trades, pre-mapped to the UI contract. */
@@ -49,6 +50,7 @@ export function TradesTable({ trades, tags }: TradesTableProps) {
     direction: 'desc',
   });
   const [filters, setFilters] = useState<TradeFilters>(DEFAULT_FILTERS);
+  const [selectedTrade, setSelectedTrade] = useState<TradeRow | null>(null);
 
   const visible = useMemo(() => {
     const filtered = filterTrades(trades, filters);
@@ -137,6 +139,15 @@ export function TradesTable({ trades, tags }: TradesTableProps) {
                     onToggle={toggleSort}
                   />
                   <th className="text-tertiary px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wide">
+                    Daily PD
+                  </th>
+                  <th className="text-tertiary px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wide">
+                    1h PD
+                  </th>
+                  <th className="text-tertiary px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wide">
+                    30m PD
+                  </th>
+                  <th className="text-tertiary px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wide">
                     Tags
                   </th>
                   <SortableTh
@@ -153,24 +164,55 @@ export function TradesTable({ trades, tags }: TradesTableProps) {
               </thead>
               <tbody>
                 {visible.map((t) => (
-                  <TradeTableRow key={t.id} trade={t} />
+                  <TradeTableRow
+                    key={t.id}
+                    trade={t}
+                    onSelect={() => setSelectedTrade(t)}
+                  />
                 ))}
               </tbody>
             </table>
           </div>
         </div>
       )}
+
+      {selectedTrade && (
+        <TradeDetailModal
+          trade={selectedTrade}
+          onClose={() => setSelectedTrade(null)}
+        />
+      )}
     </div>
   );
 }
 
-function TradeTableRow({ trade }: { trade: TradeRow }) {
+function TradeTableRow({
+  trade,
+  onSelect,
+}: {
+  trade: TradeRow;
+  onSelect: () => void;
+}) {
   return (
-    <tr className="border-hairline border-b transition-colors duration-150 last:border-b-0 hover:bg-surface-raised">
+    <tr
+      onClick={onSelect}
+      className="border-hairline border-b transition-colors duration-150 last:border-b-0 hover:bg-surface-raised cursor-pointer"
+    >
       <td className="text-primary px-3 py-2.5 font-medium">
-        <Link href={`/dashboard/trades/${trade.id}`} className="hover:text-accent-signal transition-colors">
-          {trade.instrument}
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="hover:text-accent-signal text-left font-medium transition-colors focus:outline-none"
+          >
+            {trade.instrument}
+          </button>
+          {trade.images && trade.images.length > 0 && (
+            <span className="inline-flex items-center gap-0.5 text-[10px] text-tertiary" title={`${trade.images.length} screenshots`}>
+              <Camera size={11} className="text-secondary" />
+              <span>{trade.images.length}</span>
+            </span>
+          )}
+        </div>
       </td>
       <td className="text-secondary px-3 py-2.5">{capitalize(trade.direction)}</td>
       <td className="num px-3 py-2.5 text-right">{formatPrice(trade.entryPrice)}</td>
@@ -185,6 +227,15 @@ function TradeTableRow({ trade }: { trade: TradeRow }) {
         {formatR(trade.rMultiple)}
       </td>
       <td className="text-secondary px-3 py-2.5">{capitalize(trade.status)}</td>
+      <td className="text-secondary px-3 py-2.5 font-mono text-xs">
+        {trade.dailyPdArray || <span className="text-tertiary">—</span>}
+      </td>
+      <td className="text-secondary px-3 py-2.5 font-mono text-xs">
+        {trade.oneHourPdArray || <span className="text-tertiary">—</span>}
+      </td>
+      <td className="text-secondary px-3 py-2.5 font-mono text-xs">
+        {trade.thirtyMinutePdArray || <span className="text-tertiary">—</span>}
+      </td>
       <td className="px-3 py-2.5">
         {trade.tags.length === 0 ? (
           <span className="text-tertiary">—</span>
@@ -202,7 +253,7 @@ function TradeTableRow({ trade }: { trade: TradeRow }) {
         )}
       </td>
       <td className="num px-3 py-2.5 text-right">{formatEntryDate(trade.entryTime)}</td>
-      <td className="px-3 py-2.5 text-right">
+      <td className="px-3 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
         <Link
           href={`/dashboard/trades/${trade.id}/edit`}
           className="text-tertiary hover:text-accent-signal inline-flex items-center rounded-card p-1 transition-colors duration-150"

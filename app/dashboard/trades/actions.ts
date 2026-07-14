@@ -40,7 +40,11 @@ type TradeField =
   | 'swap'
   | 'fees'
   | 'status'
-  | 'tags';
+  | 'tags'
+  | 'dailyPdArray'
+  | 'oneHourPdArray'
+  | 'thirtyMinutePdArray'
+  | 'images';
 
 const ASSET_CLASSES: ReadonlyArray<AssetClass> = [
   'equity',
@@ -108,6 +112,18 @@ function validateTrade(formData: FormData) {
   const entryTime = parseDateTimeLocal(String(formData.get('entryTime') ?? ''));
   values.entryTime = String(formData.get('entryTime') ?? '');
 
+  const dailyPdArray = String(formData.get('dailyPdArray') ?? '').trim();
+  values.dailyPdArray = dailyPdArray;
+
+  const oneHourPdArray = String(formData.get('oneHourPdArray') ?? '').trim();
+  values.oneHourPdArray = oneHourPdArray;
+
+  const thirtyMinutePdArray = String(formData.get('thirtyMinutePdArray') ?? '').trim();
+  values.thirtyMinutePdArray = thirtyMinutePdArray;
+
+  const images = formData.getAll('images').map((img) => String(img).trim()).filter(Boolean);
+  values.images = images.join(',');
+
   if (status === 'closed') {
     if (exitPrice == null) errors.exitPrice = 'Exit price is required for a closed trade.';
     if (exitTime == null) errors.exitTime = 'Exit time is required for a closed trade.';
@@ -137,6 +153,10 @@ function validateTrade(formData: FormData) {
       swap,
       fees,
       entryTime,
+      dailyPdArray,
+      oneHourPdArray,
+      thirtyMinutePdArray,
+      images,
       tagIds: Array.from(new Set(formData.getAll('tags').map((t) => String(t)))),
     },
   };
@@ -182,6 +202,10 @@ export async function createTrade(
       swap: data.swap?.toString() ?? null,
       fees: data.fees?.toString() ?? null,
       r_multiple: rMultiple != null ? String(rMultiple) : null,
+      daily_pd_array: data.dailyPdArray || null,
+      one_hour_pd_array: data.oneHourPdArray || null,
+      thirty_minute_pd_array: data.thirtyMinutePdArray || null,
+      images: data.images,
     })
     .select('id')
     .single();
@@ -232,6 +256,10 @@ export async function updateTrade(
       swap: data.swap?.toString() ?? null,
       fees: data.fees?.toString() ?? null,
       r_multiple: rMultiple != null ? String(rMultiple) : null,
+      daily_pd_array: data.dailyPdArray || null,
+      one_hour_pd_array: data.oneHourPdArray || null,
+      thirty_minute_pd_array: data.thirtyMinutePdArray || null,
+      images: data.images,
     })
     .eq('id', tradeId);
 

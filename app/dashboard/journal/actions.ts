@@ -31,6 +31,31 @@ export async function saveJournalEntry(
 
   if (error) return { error: error.message };
 
+  // Always delete existing links first
+  await supabase
+    .from('journal_trade_links')
+    .delete()
+    .eq('journal_entry_id', data.id);
+
+  // Match trades executed on this day
+  const startOfDay = `${date}T00:00:00.000Z`;
+  const endOfDay = `${date}T23:59:59.999Z`;
+
+  const { data: matchedTrades } = await supabase
+    .from('trades')
+    .select('id')
+    .eq('user_id', user.id)
+    .gte('entry_time', startOfDay)
+    .lte('entry_time', endOfDay);
+
+  if (matchedTrades && matchedTrades.length > 0) {
+    const linksToInsert = matchedTrades.map((t) => ({
+      journal_entry_id: data.id,
+      trade_id: t.id,
+    }));
+    await supabase.from('journal_trade_links').insert(linksToInsert);
+  }
+
   revalidatePath('/dashboard/journal');
   revalidatePath('/dashboard');
   return { id: data.id };

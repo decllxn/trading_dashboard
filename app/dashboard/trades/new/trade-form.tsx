@@ -21,6 +21,9 @@ import {
 } from '@/lib/trades';
 import { computeNetPnl } from '@/lib/stats';
 import type { AssetClass, Direction, Tag, TradeStatus } from '@/db/schema';
+import { createBrowserClient } from '@supabase/ssr';
+import { cn } from '@/lib/utils';
+import { UploadCloud, X, Loader2 } from 'lucide-react';
 
 /** Shape of the trade data passed in for edit mode. */
 export interface TradeInitialData {
@@ -41,6 +44,10 @@ export interface TradeInitialData {
   swap: string;
   fees: string;
   tagIds: ReadonlyArray<string>;
+  dailyPdArray?: string;
+  oneHourPdArray?: string;
+  thirtyMinutePdArray?: string;
+  images?: string[];
 }
 
 interface TradeFormProps {
@@ -100,6 +107,63 @@ export function TradeForm({ tags, initialData }: TradeFormProps) {
   const [selectedTags, setSelectedTags] = useState<ReadonlyArray<string>>(
     v.tags ? v.tags.split(',') : (initialData?.tagIds ?? []),
   );
+
+  const [uploadedImages, setUploadedImages] = useState<string[]>(
+    initialData?.images || []
+  );
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    if (uploadedImages.length + files.length > 3) {
+      setUploadError("You can only upload up to 3 screenshots.");
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadError(null);
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseAnonKey) {
+      setUploadError("Supabase configuration is missing.");
+      setIsUploading(false);
+      return;
+    }
+    const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
+
+    const newUrls = [...uploadedImages];
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`;
+        const filePath = `screenshots/${fileName}`;
+
+        const { data, error } = await supabase.storage
+          .from('trade-screenshots')
+          .upload(filePath, file);
+
+        if (error) throw error;
+
+        if (data) {
+          const { data: { publicUrl } } = supabase.storage
+            .from('trade-screenshots')
+            .getPublicUrl(data.path);
+          newUrls.push(publicUrl);
+        }
+      }
+      setUploadedImages(newUrls);
+    } catch (error: any) {
+      console.error("Upload error:", error);
+      setUploadError(error.message || "Failed to upload image.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   const rPreview = useMemo(
     () =>
@@ -371,6 +435,40 @@ export function TradeForm({ tags, initialData }: TradeFormProps) {
         </div>
       </section>
 
+      {/* Market Context — Daily, 1h & 30m PD arrays */}
+      <section className="space-y-4">
+        <SectionTitle>Market Context</SectionTitle>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Field id="dailyPdArray" label="Daily PD Array" error={state.errors?.dailyPdArray}>
+            <Input
+              id="dailyPdArray"
+              name="dailyPdArray"
+              defaultValue={v.dailyPdArray ?? initialData?.dailyPdArray}
+              placeholder="e.g. Daily Order Block, Daily FVG"
+              autoComplete="off"
+            />
+          </Field>
+          <Field id="oneHourPdArray" label="1 Hr PD Array" error={state.errors?.oneHourPdArray}>
+            <Input
+              id="oneHourPdArray"
+              name="oneHourPdArray"
+              defaultValue={v.oneHourPdArray ?? initialData?.oneHourPdArray}
+              placeholder="e.g. 1h Breaker, 1h Mitigation Block"
+              autoComplete="off"
+            />
+          </Field>
+          <Field id="thirtyMinutePdArray" label="30 Min PD Array" error={state.errors?.thirtyMinutePdArray}>
+            <Input
+              id="thirtyMinutePdArray"
+              name="thirtyMinutePdArray"
+              defaultValue={v.thirtyMinutePdArray ?? initialData?.thirtyMinutePdArray}
+              placeholder="e.g. 30m FVG, 30m Order Block"
+              autoComplete="off"
+            />
+          </Field>
+        </div>
+      </section>
+
       {/* Tags — grouped multi-select */}
       <section className="space-y-4">
         <SectionTitle>Tags</SectionTitle>
@@ -385,6 +483,52 @@ export function TradeForm({ tags, initialData }: TradeFormProps) {
             )
           }
         />
+      </section>
+
+      {/* Screenshots — up to 3 files upload */}
+      <section className="space-y-4">
+        <SectionTitle>Screenshots (Max 3)</SectionTitle>
+        {uploadError && (
+          <p className="text-xs text-accent-alert">{uploadError}</p>
+        )}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {uploadedImages.map((url, idx) => (
+            <div key={url} className="relative group aspect-video border border-hairline bg-surface rounded-card overflow-hidden">
+              <img src={url} alt={`Screenshot ${idx + 1}`} className="w-full h-full object-cover" />
+              <button
+                type="button"
+                onClick={() => setUploadedImages(prev => prev.filter(img => img !== url))}
+                className="absolute top-2 right-2 p-1 bg-surface-raised/85 hover:bg-loss hover:text-white rounded-full border border-hairline text-secondary transition-all duration-150 shadow-sm"
+              >
+                <X size={12} />
+              </button>
+              <input type="hidden" name="images" value={url} />
+            </div>
+          ))}
+          {uploadedImages.length < 3 && (
+            <label className={cn(
+              "flex flex-col items-center justify-center aspect-video border border-dashed border-hairline rounded-card bg-surface hover:bg-surface-raised cursor-pointer transition-all duration-150 group",
+              isUploading && "pointer-events-none opacity-50"
+            )}>
+              {isUploading ? (
+                <Loader2 className="w-6 h-6 text-accent-signal animate-spin" />
+              ) : (
+                <>
+                  <UploadCloud className="w-6 h-6 text-secondary group-hover:text-accent-signal group-hover:scale-110 transition-transform duration-150" />
+                  <span className="text-[11px] text-tertiary mt-2">Upload screenshot</span>
+                </>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                disabled={isUploading}
+                onChange={handleImageUpload}
+              />
+            </label>
+          )}
+        </div>
       </section>
 
       <div className="border-hairline flex items-center justify-end gap-3 border-t pt-6">

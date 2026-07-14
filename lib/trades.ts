@@ -186,6 +186,13 @@ export interface TradeRow {
   fees: number | null;
   rMultiple: number | null;
   status: TradeStatus;
+  dailyPdArray: string | null;
+  oneHourPdArray: string | null;
+  thirtyMinutePdArray: string | null;
+  images: string[] | null;
+  stopPrice: number | null;
+  targetPrice: number | null;
+  exitTime: string | null;
   /** ISO string; the row is sorted on this by default. Null sorts last. */
   entryTime: string | null;
   /** Resolved tag names for this trade, alphabetized by name. */

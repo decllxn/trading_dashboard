@@ -63,7 +63,7 @@ export default async function TradesPage() {
     supabase
       .from('trades')
       .select(
-        'id, instrument, asset_class, direction, entry_price, exit_price, size, pnl, commission, swap, fees, r_multiple, status, entry_time',
+        'id, instrument, asset_class, direction, entry_price, exit_price, size, stop_price, target_price, entry_time, exit_time, pnl, commission, swap, fees, r_multiple, status, daily_pd_array, one_hour_pd_array, thirty_minute_pd_array, images',
       )
       .eq('user_id', user.id)
       .order('entry_time', { ascending: false, nullsFirst: false }),
@@ -133,11 +133,18 @@ export default async function TradesPage() {
         commission,
         swap,
         fees,
+        stopPrice: toNumber(t.stop_price),
+        targetPrice: toNumber(t.target_price),
+        exitTime: t.exit_time,
         // Headline P&L is net (gross − costs). Falls back to gross when no
         // costs are recorded, so existing rows are unaffected.
         pnl: computeNetPnl(grossPnl, commission, swap, fees),
         rMultiple: toNumber(t.r_multiple),
         status: t.status as TradeStatus,
+        dailyPdArray: t.daily_pd_array,
+        oneHourPdArray: t.one_hour_pd_array,
+        thirtyMinutePdArray: t.thirty_minute_pd_array,
+        images: t.images || [],
         entryTime: t.entry_time,
         tags: (tagIdsByTradeId.get(t.id) ?? [])
           .map((tagId) => tagNameById.get(tagId))
@@ -207,4 +214,11 @@ interface RawTradeRow {
   r_multiple: string | null;
   status: string;
   entry_time: string | null;
+  daily_pd_array: string | null;
+  one_hour_pd_array: string | null;
+  thirty_minute_pd_array: string | null;
+  images: string[] | null;
+  stop_price: string | null;
+  target_price: string | null;
+  exit_time: string | null;
 }

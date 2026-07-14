@@ -138,4 +138,7 @@
   .prose-custom hr {
     @apply border-hairline my-6;
   }
+  .prose-custom.ProseMirror {
+    @apply min-h-full outline-none;
+  }
 }

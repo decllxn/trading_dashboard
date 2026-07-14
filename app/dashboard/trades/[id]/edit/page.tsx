@@ -54,7 +54,7 @@ export default async function EditTradePage({
   const { data: trade, error: tradeError } = await supabase
     .from('trades')
     .select(
-      'id, instrument, asset_class, direction, entry_price, exit_price, size, stop_price, target_price, entry_time, exit_time, pnl, commission, swap, fees, status',
+      'id, instrument, asset_class, direction, entry_price, exit_price, size, stop_price, target_price, entry_time, exit_time, pnl, commission, swap, fees, status, daily_pd_array, one_hour_pd_array, thirty_minute_pd_array, images',
     )
     .eq('id', params.id)
     .single();
@@ -99,6 +99,10 @@ export default async function EditTradePage({
     swap: trade.swap ?? '',
     fees: trade.fees ?? '',
     tagIds: existingTagIds,
+    dailyPdArray: trade.daily_pd_array ?? '',
+    oneHourPdArray: trade.one_hour_pd_array ?? '',
+    thirtyMinutePdArray: trade.thirty_minute_pd_array ?? '',
+    images: trade.images || [],
   };
 
   return (
