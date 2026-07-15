@@ -46,15 +46,16 @@ export function ScreenshotGallery({ images }: ScreenshotGalleryProps) {
           <div
             key={url}
             onClick={() => setActiveIdx(idx)}
-            className="group relative aspect-video cursor-zoom-in overflow-hidden rounded-card border border-hairline bg-surface transition-all duration-200 hover:border-accent-signal hover:scale-[1.02] hover:shadow-md"
+            className="group relative aspect-video cursor-zoom-in overflow-hidden rounded-card border border-hairline bg-surface transition-colors duration-150 hover:border-accent-signal"
           >
             <img
               src={url}
               alt={`Screenshot ${idx + 1}`}
-              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+              className="h-full w-full object-cover"
             />
-            <div className="absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/20" />
-            <div className="absolute bottom-2 right-2 rounded-full border border-hairline bg-surface-raised/90 p-1 text-secondary opacity-0 transition-opacity duration-200 group-hover:opacity-100 shadow-sm">
+            {/* Hairline scrim for legibility of the expand affordance. */}
+            <div className="absolute inset-0 bg-base/0 transition-colors duration-150 group-hover:bg-base/20" />
+            <div className="absolute bottom-2 right-2 rounded-card border border-hairline bg-surface-raised/90 p-1 text-secondary opacity-0 transition-opacity duration-150 group-hover:opacity-100">
               <Maximize2 size={12} />
             </div>
           </div>
@@ -63,12 +64,15 @@ export function ScreenshotGallery({ images }: ScreenshotGalleryProps) {
 
       {/* Lightbox Overlay */}
       {activeIdx !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 backdrop-blur-md transition-opacity duration-300">
+        /* Lightbox overlay. The base token (#0B0D10) at high opacity stands in
+           for raw black so the scrim stays within the design palette; controls
+           use primary/secondary text and surface-raised fills, not white. */
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-base/90 p-4">
           {/* Close button */}
           <button
             type="button"
             onClick={() => setActiveIdx(null)}
-            className="absolute top-4 right-4 z-50 rounded-full border border-white/10 bg-white/5 p-2 text-white hover:bg-white/15 transition-all shadow-lg"
+            className="absolute top-4 right-4 z-50 rounded-card border border-hairline bg-surface-raised p-2 text-primary transition-colors duration-150 hover:text-accent-signal"
           >
             <X size={20} />
           </button>
@@ -78,7 +82,7 @@ export function ScreenshotGallery({ images }: ScreenshotGalleryProps) {
             <button
               type="button"
               onClick={handlePrev}
-              className="absolute left-4 z-50 rounded-full border border-white/10 bg-white/5 p-3 text-white hover:bg-white/15 transition-all shadow-lg hidden sm:block"
+              className="absolute left-4 z-50 hidden rounded-card border border-hairline bg-surface-raised p-3 text-primary transition-colors duration-150 hover:text-accent-signal sm:block"
             >
               <ChevronLeft size={24} />
             </button>
@@ -89,10 +93,10 @@ export function ScreenshotGallery({ images }: ScreenshotGalleryProps) {
             <img
               src={images[activeIdx]}
               alt={`Expanded screenshot ${activeIdx + 1}`}
-              className="max-h-[80vh] max-w-[90vw] object-contain rounded shadow-2xl animate-fade-in"
+              className="max-h-[80vh] max-w-[90vw] rounded-card object-contain"
             />
             {images.length > 1 && (
-              <span className="text-white/60 text-xs mt-3 font-mono">
+              <span className="num text-secondary mt-3 text-xs">
                 {activeIdx + 1} / {images.length}
               </span>
             )}
@@ -103,26 +107,26 @@ export function ScreenshotGallery({ images }: ScreenshotGalleryProps) {
             <button
               type="button"
               onClick={handleNext}
-              className="absolute right-4 z-50 rounded-full border border-white/10 bg-white/5 p-3 text-white hover:bg-white/15 transition-all shadow-lg hidden sm:block"
+              className="absolute right-4 z-50 hidden rounded-card border border-hairline bg-surface-raised p-3 text-primary transition-colors duration-150 hover:text-accent-signal sm:block"
             >
               <ChevronRight size={24} />
             </button>
           )}
 
-          {/* Mobile Swipe / Tap Zones */}
+          {/* Mobile Tap Zones */}
           {images.length > 1 && (
             <div className="absolute inset-x-0 bottom-4 flex justify-center gap-4 sm:hidden">
               <button
                 type="button"
                 onClick={handlePrev}
-                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-white text-xs font-medium"
+                className="rounded-card border border-hairline bg-surface-raised px-4 py-2 text-xs font-medium text-primary"
               >
                 Previous
               </button>
               <button
                 type="button"
                 onClick={handleNext}
-                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-white text-xs font-medium"
+                className="rounded-card border border-hairline bg-surface-raised px-4 py-2 text-xs font-medium text-primary"
               >
                 Next
               </button>

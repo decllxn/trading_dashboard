@@ -17,7 +17,7 @@ import {
   extractTradesFromText,
   isAnthropicConfigured,
 } from '@/lib/pdf-extract';
-import type { Direction } from '@/db/schema';
+import type { Direction, TradeStatus } from '@/db/schema';
 
 /**
  * Import payload shared by preview + commit. The parsed CSV travels back over
@@ -306,12 +306,15 @@ function rMultipleOrNull(t: {
   entryPrice: number | null;
   stopPrice: number | null;
   exitPrice: number | null;
+  targetPrice: number | null;
+  status: TradeStatus;
   direction: Direction;
 }): string | null {
+  const exitOrTarget = t.status === 'open' ? t.targetPrice : t.exitPrice;
   const r = computeRMultiple(
     t.entryPrice,
     t.stopPrice,
-    t.exitPrice,
+    exitOrTarget,
     t.direction,
   );
   return r == null ? null : String(r);

@@ -113,7 +113,7 @@ export default async function TradeDetailPage({
           ) : null}
           <div className="flex items-center gap-2">
             <span className="text-tertiary">R</span>
-            <span className={cn('text-right', rColorClass(Number(trade.r_multiple)))}>
+            <span className={cn('num text-right', rColorClass(Number(trade.r_multiple)))}>
               {trade.r_multiple != null ? formatR(Number(trade.r_multiple)) : '—'}
             </span>
           </div>

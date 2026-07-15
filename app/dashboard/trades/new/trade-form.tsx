@@ -95,6 +95,9 @@ export function TradeForm({ tags, initialData }: TradeFormProps) {
   const [exitPrice, setExitPrice] = useState(
     v.exitPrice ?? initialData?.exitPrice ?? '',
   );
+  const [targetPrice, setTargetPrice] = useState(
+    v.targetPrice ?? initialData?.targetPrice ?? '',
+  );
 
   // Carrying costs — optional, default empty. Drives the live net P&L readout.
   const [pnl, setPnl] = useState(v.pnl ?? initialData?.pnl ?? '');
@@ -166,14 +169,16 @@ export function TradeForm({ tags, initialData }: TradeFormProps) {
   };
 
   const rPreview = useMemo(
-    () =>
-      computeRMultiple(
+    () => {
+      const exitOrTarget = status === 'open' ? targetPrice : exitPrice;
+      return computeRMultiple(
         parseNumber(entryPrice),
         parseNumber(stopPrice),
-        parseNumber(exitPrice),
+        parseNumber(exitOrTarget),
         direction,
-      ),
-    [entryPrice, stopPrice, exitPrice, direction],
+      );
+    },
+    [entryPrice, stopPrice, exitPrice, targetPrice, direction, status],
   );
 
   // Net P&L = gross − commission − swap − fees. Live so the user sees the true
@@ -302,6 +307,7 @@ export function TradeForm({ tags, initialData }: TradeFormProps) {
               min="0"
               defaultValue={v.targetPrice ?? initialData?.targetPrice}
               placeholder="0.00"
+              onChange={(e) => setTargetPrice(e.target.value)}
             />
           </Field>
           <Field id="exitPrice" label="Exit price" error={state.errors?.exitPrice}>
@@ -498,7 +504,7 @@ export function TradeForm({ tags, initialData }: TradeFormProps) {
               <button
                 type="button"
                 onClick={() => setUploadedImages(prev => prev.filter(img => img !== url))}
-                className="absolute top-2 right-2 p-1 bg-surface-raised/85 hover:bg-loss hover:text-white rounded-full border border-hairline text-secondary transition-all duration-150 shadow-sm"
+                className="absolute top-2 right-2 p-1 bg-surface-raised/90 hover:text-loss border border-hairline rounded-card text-secondary transition-colors duration-150"
               >
                 <X size={12} />
               </button>
@@ -514,7 +520,7 @@ export function TradeForm({ tags, initialData }: TradeFormProps) {
                 <Loader2 className="w-6 h-6 text-accent-signal animate-spin" />
               ) : (
                 <>
-                  <UploadCloud className="w-6 h-6 text-secondary group-hover:text-accent-signal group-hover:scale-110 transition-transform duration-150" />
+                  <UploadCloud className="w-6 h-6 text-secondary group-hover:text-accent-signal transition-colors duration-150" />
                   <span className="text-[11px] text-tertiary mt-2">Upload screenshot</span>
                 </>
               )}

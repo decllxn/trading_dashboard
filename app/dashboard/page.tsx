@@ -20,6 +20,7 @@ import {
 } from '@/lib/stats';
 import { EdgeScoreGauge } from '@/components/dashboard/edge-score-gauge';
 import { StatGrid } from '@/components/dashboard/stat-grid';
+import { RiskStatGrid } from '@/components/dashboard/risk-stat-grid';
 import { EquityCurveChart } from '@/components/charts/equity-curve-chart';
 import { EquityComparisonChart } from '@/components/charts/equity-comparison-chart';
 import { RMultipleHistogram } from '@/components/charts/r-multiple-histogram';
@@ -225,20 +226,11 @@ export default async function DashboardPage() {
             <h2 className="font-display text-primary mb-3 text-xs uppercase tracking-wide">
               Risk-adjusted
             </h2>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <SecondaryStat
-                label="Sharpe"
-                value={empty || sharpe == null ? null : sharpe.toFixed(2)}
-              />
-              <SecondaryStat
-                label="Sortino"
-                value={empty || sortino == null ? null : sortino.toFixed(2)}
-              />
-              <SecondaryStat
-                label="Avg R"
-                value={empty || avgR == null ? null : formatR(avgR)}
-              />
-            </div>
+            <RiskStatGrid
+              sharpe={empty || sharpe == null ? null : sharpe.toFixed(2)}
+              sortino={empty || sortino == null ? null : sortino.toFixed(2)}
+              avgR={empty || avgR == null ? null : formatR(avgR)}
+            />
           </section>
         </div>
       </div>
@@ -278,18 +270,4 @@ function toNumber(value: string | null): number | null {
 function formatR(value: number): string {
   const sign = value > 0 ? '+' : value < 0 ? '−' : '';
   return `${sign}${value.toFixed(2)}R`;
-}
-
-interface SecondaryStatProps {
-  label: string;
-  value: string | null;
-}
-
-function SecondaryStat({ label, value }: SecondaryStatProps) {
-  return (
-    <div className="border-hairline bg-surface rounded-card border px-4 py-3">
-      <p className="text-tertiary text-[10px] uppercase tracking-wide">{label}</p>
-      <p className="num text-primary mt-2 text-lg">{value ?? '—'}</p>
-    </div>
-  );
 }

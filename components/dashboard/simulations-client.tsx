@@ -113,7 +113,7 @@ export function SimulationsClient({ initialRMultiples }: SimulationsClientProps)
                 max="10000"
                 value={numSimulations}
                 onChange={(e) => setNumSimulations(Number(e.target.value))}
-                className="w-full bg-surface-raised border border-hairline rounded px-3 py-1.5 text-xs text-primary num outline-none focus:border-accent-signal/80 transition-colors"
+                className="num w-full rounded-card border border-hairline bg-surface-raised px-3 py-1.5 text-xs text-primary outline-none transition-colors duration-150 focus:border-accent-signal focus:ring-1 focus:ring-accent-signal"
                 required
               />
             </div>
@@ -128,7 +128,7 @@ export function SimulationsClient({ initialRMultiples }: SimulationsClientProps)
                 max="500"
                 value={numTrades}
                 onChange={(e) => setNumTrades(Number(e.target.value))}
-                className="w-full bg-surface-raised border border-hairline rounded px-3 py-1.5 text-xs text-primary num outline-none focus:border-accent-signal/80 transition-colors"
+                className="num w-full rounded-card border border-hairline bg-surface-raised px-3 py-1.5 text-xs text-primary outline-none transition-colors duration-150 focus:border-accent-signal focus:ring-1 focus:ring-accent-signal"
                 required
               />
             </div>
@@ -144,7 +144,7 @@ export function SimulationsClient({ initialRMultiples }: SimulationsClientProps)
                 max="20"
                 value={riskPerTrade}
                 onChange={(e) => setRiskPerTrade(Number(e.target.value))}
-                className="w-full bg-surface-raised border border-hairline rounded px-3 py-1.5 text-xs text-primary num outline-none focus:border-accent-signal/80 transition-colors"
+                className="num w-full rounded-card border border-hairline bg-surface-raised px-3 py-1.5 text-xs text-primary outline-none transition-colors duration-150 focus:border-accent-signal focus:ring-1 focus:ring-accent-signal"
                 required
               />
             </div>
@@ -160,7 +160,7 @@ export function SimulationsClient({ initialRMultiples }: SimulationsClientProps)
                 max="99"
                 value={ruinThreshold}
                 onChange={(e) => setRuinThreshold(Number(e.target.value))}
-                className="w-full bg-surface-raised border border-hairline rounded px-3 py-1.5 text-xs text-primary num outline-none focus:border-accent-signal/80 transition-colors"
+                className="num w-full rounded-card border border-hairline bg-surface-raised px-3 py-1.5 text-xs text-primary outline-none transition-colors duration-150 focus:border-accent-signal focus:ring-1 focus:ring-accent-signal"
                 required
               />
             </div>
@@ -168,7 +168,7 @@ export function SimulationsClient({ initialRMultiples }: SimulationsClientProps)
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-accent-signal hover:bg-accent-signal/90 text-[#0B0D10] font-semibold text-xs py-2 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-accent-signal hover:bg-accent-signal/90 text-base font-semibold text-xs py-2 rounded-card transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Running Projections...' : 'Execute Simulation'}
             </button>
@@ -225,7 +225,7 @@ export function SimulationsClient({ initialRMultiples }: SimulationsClientProps)
 
         {loading && (
           <div className="border-hairline bg-surface rounded-card border px-6 py-16 text-center space-y-3">
-            <div className="animate-spin h-5 w-5 border-2 border-accent-signal border-t-transparent rounded-full mx-auto" />
+            <div className="animate-spin h-5 w-5 border-2 border-accent-signal border-t-transparent rounded-card mx-auto" />
             <p className="text-secondary text-xs font-display uppercase tracking-wider">
               Running Monte Carlo paths...
             </p>
@@ -240,7 +240,9 @@ export function SimulationsClient({ initialRMultiples }: SimulationsClientProps)
                 <span className="text-tertiary block text-[9px] uppercase tracking-wider font-display">
                   Probability of Ruin
                 </span>
-                <span className={`num text-lg font-semibold block mt-1.5 ${mcResult.ruin_probability > 0.1 ? 'text-loss' : 'text-gain'}`}>
+                {/* Ruin probability is a risk metric, not P&L — gain/loss coloring
+                    is reserved for signed performance, so this stays neutral. */}
+                <span className="num text-primary text-lg font-semibold block mt-1.5">
                   {(mcResult.ruin_probability * 100).toFixed(2)}%
                 </span>
               </div>
@@ -256,7 +258,7 @@ export function SimulationsClient({ initialRMultiples }: SimulationsClientProps)
                 <span className="text-tertiary block text-[9px] uppercase tracking-wider font-display">
                   Median Max Drawdown
                 </span>
-                <span className="num text-loss text-lg font-semibold block mt-1.5">
+                <span className="num text-primary text-lg font-semibold block mt-1.5">
                   {mcResult.max_drawdown_percentiles["50"].toFixed(1)}%
                 </span>
               </div>
@@ -264,7 +266,7 @@ export function SimulationsClient({ initialRMultiples }: SimulationsClientProps)
                 <span className="text-tertiary block text-[9px] uppercase tracking-wider font-display">
                   90th Percentile MDD
                 </span>
-                <span className="num text-loss text-lg font-semibold block mt-1.5">
+                <span className="num text-primary text-lg font-semibold block mt-1.5">
                   {mcResult.max_drawdown_percentiles["90"].toFixed(1)}%
                 </span>
               </div>
@@ -354,15 +356,15 @@ export function SimulationsClient({ initialRMultiples }: SimulationsClientProps)
               </div>
               <div className="flex flex-wrap items-center justify-center gap-6 mt-4 text-[10px] text-secondary font-display">
                 <div className="flex items-center gap-1.5">
-                  <span className="w-3 h-0.5 border-t border-dashed border-[#565D68] block" />
+                  <span className="w-3 h-0.5 border-t border-dashed border-tertiary block" />
                   <span>10th / 90th Percentile (Outer Risk Range)</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className="w-3 h-0.5 border-t border-dashed border-[#4FD1C5] opacity-50 block" />
+                  <span className="w-3 h-0.5 border-t border-dashed border-accent-signal opacity-50 block" />
                   <span>25th / 75th Percentile (Inner Risk Range)</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className="w-3 h-0.5 bg-[#4FD1C5] block" />
+                  <span className="w-3 h-0.5 bg-accent-signal block" />
                   <span>50th Percentile (Median Projection)</span>
                 </div>
               </div>
@@ -388,9 +390,8 @@ export function SimulationsClient({ initialRMultiples }: SimulationsClientProps)
                     </thead>
                     <tbody className="divide-y divide-hairline/40">
                       {sizingResult.map((sizing: any, index: number) => {
-                        const isHighRuin = sizing.ruin_probability > 0.1;
                         return (
-                          <tr key={index} className="hover:bg-surface-raised/40 transition-colors">
+                          <tr key={index} className="hover:bg-surface-raised/40 transition-colors duration-150">
                             <td className="py-2.5 font-semibold num text-accent-signal">
                               {sizing.risk_percentage.toFixed(1)}%
                             </td>
@@ -400,13 +401,13 @@ export function SimulationsClient({ initialRMultiples }: SimulationsClientProps)
                             <td className="py-2.5 text-right num text-primary">
                               {sizing.median_ending_equity.toFixed(1)}%
                             </td>
-                            <td className="py-2.5 text-right num text-loss">
+                            <td className="py-2.5 text-right num text-primary">
                               {sizing.mean_max_drawdown.toFixed(1)}%
                             </td>
-                            <td className="py-2.5 text-right num text-loss">
+                            <td className="py-2.5 text-right num text-primary">
                               {sizing.median_max_drawdown.toFixed(1)}%
                             </td>
-                            <td className={`py-2.5 text-right num font-semibold ${isHighRuin ? 'text-loss' : 'text-gain'}`}>
+                            <td className="py-2.5 text-right num font-semibold text-primary">
                               {(sizing.ruin_probability * 100).toFixed(1)}%
                             </td>
                           </tr>

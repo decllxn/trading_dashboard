@@ -11,9 +11,9 @@ export default function CopilotPage() {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: `Welcome, trader. I am your Antigravity Copilot. 
+      content: `Copilot ready. Query your trades and journal directly.
 
-I can query your trade database and journal logs directly to answer performance questions. Here are some examples of what you can ask:
+Ask things like:
 * "What is my win rate and expectancy for forex trades?"
 * "Show me my 5 most recent closed trades."
 * "Search my journals for mentions of 'revenge' or 'FOMO'."`
@@ -205,7 +205,7 @@ I can query your trade database and journal logs directly to answer performance 
                   Copilot is analyzing...
                 </span>
                 <div className="flex items-center gap-1.5 text-xs text-secondary mt-1">
-                  <div className="animate-spin h-3.5 w-3.5 border border-accent-signal border-t-transparent rounded-full" />
+                  <div className="animate-spin h-3.5 w-3.5 border border-accent-signal border-t-transparent rounded-card" />
                   <span>Scanning databases & computing statistics</span>
                 </div>
               </div>
@@ -250,7 +250,7 @@ I can query your trade database and journal logs directly to answer performance 
             <button
               type="submit"
               disabled={!input.trim() || loading}
-              className="bg-accent-signal hover:bg-accent-signal/90 disabled:bg-surface-raised disabled:text-tertiary disabled:border-hairline text-[#0B0D10] font-display font-semibold text-xs px-5 rounded border border-transparent transition-colors"
+              className="bg-accent-signal hover:bg-accent-signal/90 disabled:bg-surface-raised disabled:text-tertiary disabled:border-hairline text-base font-display font-semibold text-xs px-5 rounded-card border border-transparent transition-colors duration-150"
             >
               SEND
             </button>

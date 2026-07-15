@@ -48,7 +48,7 @@ export function TradeDetailModal({ trade, onClose }: TradeDetailModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-base/90 p-4">
       {/* Modal Container */}
       <div className="w-full max-w-2xl border border-hairline bg-surface rounded-card max-h-[90vh] overflow-y-auto no-scrollbar">
         {/* Header */}
@@ -237,7 +237,7 @@ export function TradeDetailModal({ trade, onClose }: TradeDetailModalProps) {
                     setDeleteInput('');
                     setDeleteError(null);
                   }}
-                  className="text-secondary hover:text-primary px-3 py-1.5 text-xs transition-colors"
+                  className="text-secondary hover:text-primary px-3 py-1.5 text-xs transition-colors duration-150"
                 >
                   Cancel
                 </button>
@@ -245,13 +245,13 @@ export function TradeDetailModal({ trade, onClose }: TradeDetailModalProps) {
                   type="button"
                   disabled={deleteInput !== trade.instrument || isPending}
                   onClick={handleDelete}
-                  className="bg-red-950/20 border border-red-900/60 hover:bg-red-900/40 text-red-400 disabled:opacity-20 disabled:pointer-events-none rounded-card px-3 py-1.5 text-xs font-semibold transition-colors"
+                  className="border border-loss/60 bg-loss/10 text-loss hover:bg-loss/20 disabled:pointer-events-none disabled:opacity-30 rounded-card px-3 py-1.5 text-xs font-semibold transition-colors duration-150"
                 >
-                  {isPending ? 'Deleting...' : 'Confirm Delete'}
+                  {isPending ? 'Deleting…' : 'Confirm Delete'}
                 </button>
               </div>
               {deleteError && (
-                <p className="text-xs text-red-400 mt-1 font-medium">{deleteError}</p>
+                <p className="text-loss mt-1 text-xs font-medium">{deleteError}</p>
               )}
             </div>
           ) : null}
@@ -263,7 +263,7 @@ export function TradeDetailModal({ trade, onClose }: TradeDetailModalProps) {
             <button
               type="button"
               onClick={() => setIsDeleting(true)}
-              className="text-secondary hover:text-red-400 border border-hairline/80 hover:bg-red-950/10 rounded-card px-3 py-2 text-xs font-medium inline-flex items-center gap-1.5 transition-colors duration-150"
+              className="text-secondary hover:text-loss border border-hairline hover:border-loss/50 rounded-card px-3 py-2 text-xs font-medium inline-flex items-center gap-1.5 transition-colors duration-150"
             >
               <Trash2 size={13} />
               Delete trade

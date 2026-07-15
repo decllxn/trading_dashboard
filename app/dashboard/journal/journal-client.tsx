@@ -311,7 +311,7 @@ export function JournalClient({ entries: initialEntries, trades, links: initialL
                   >
                     {format(day, 'd')}
                     {hasSavedContent && (
-                      <span className="absolute bottom-1 w-1 h-1 bg-accent-signal rounded-full" />
+                      <span className="absolute bottom-1 h-1 w-1 rounded-sm bg-accent-signal" />
                     )}
                   </button>
                 );
@@ -413,10 +413,10 @@ export function JournalClient({ entries: initialEntries, trades, links: initialL
                     />
                     <div className={cn(
                       "w-4 h-4 rounded border flex items-center justify-center transition-colors",
-                      currentEntry?.mistakes?.includes(mistake) ? "bg-accent-signal border-accent-signal text-black" : "border-hairline bg-base group-hover:border-primary"
+                      currentEntry?.mistakes?.includes(mistake) ? "bg-accent-signal border-accent-signal text-base" : "border-hairline bg-base group-hover:border-primary"
                     )}>
                       {currentEntry?.mistakes?.includes(mistake) && (
-                        <svg viewBox="0 0 14 14" fill="none" className="w-3 h-3 text-[#0B0D10]"><path d="M3 7.5L5.5 10L11 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        <svg viewBox="0 0 14 14" fill="none" className="w-3 h-3 text-base"><path d="M3 7.5L5.5 10L11 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                       )}
                     </div>
                     <span className="text-sm text-secondary group-hover:text-primary transition-colors">{mistake}</span>

@@ -179,7 +179,8 @@ export async function createTrade(
   const { errors, values, data } = validateTrade(formData);
   if (Object.keys(errors).length > 0) return { errors, values };
 
-  const rMultiple = computeRMultiple(data.entryPrice!, data.stopPrice, data.exitPrice, data.direction);
+  const exitOrTarget = data.status === 'open' ? data.targetPrice : data.exitPrice;
+  const rMultiple = computeRMultiple(data.entryPrice!, data.stopPrice, exitOrTarget, data.direction);
 
   const { data: tradeRow, error: tradeError } = await supabase
     .from('trades')
@@ -235,7 +236,8 @@ export async function updateTrade(
   const { errors, values, data } = validateTrade(formData);
   if (Object.keys(errors).length > 0) return { errors, values };
 
-  const rMultiple = computeRMultiple(data.entryPrice!, data.stopPrice, data.exitPrice, data.direction);
+  const exitOrTarget = data.status === 'open' ? data.targetPrice : data.exitPrice;
+  const rMultiple = computeRMultiple(data.entryPrice!, data.stopPrice, exitOrTarget, data.direction);
 
   const { error: tradeError } = await supabase
     .from('trades')

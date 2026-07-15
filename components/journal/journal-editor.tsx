@@ -80,10 +80,9 @@ export function JournalEditor({ initialContent, onSave, readOnly = false }: Jour
 
   if (!editor) {
     return (
-      <div 
-        className={cn(
-          "w-full animate-pulse bg-base h-[520px] rounded-card border border-hairline"
-        )} 
+      // Static skeleton — no decorative pulse (DS motion is count-up + hover only).
+      <div
+        className="w-full bg-base h-[520px] rounded-card border border-hairline"
       />
     );
   }
@@ -195,27 +194,26 @@ export function JournalEditor({ initialContent, onSave, readOnly = false }: Jour
           <div className="flex items-center">
             {isSaving ? (
               <div className="flex items-center gap-2">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent-signal opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-accent-signal"></span>
-                </span>
-                <span className="text-[10px] uppercase tracking-wide font-mono text-primary animate-pulse">
-                  Syncing to database...
+                {/* Static status dot — no decorative motion (DS: only count-up
+                    + 150ms hover transitions). */}
+                <span className="h-1.5 w-1.5 rounded-sm bg-accent-signal" />
+                <span className="num text-[10px] uppercase tracking-wide text-primary">
+                  Syncing to database…
                 </span>
               </div>
             ) : isDirty ? (
               <div className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-secondary"></span>
-                <span className="text-[10px] uppercase tracking-wide font-mono text-secondary">
+                <span className="h-1.5 w-1.5 rounded-sm bg-secondary" />
+                <span className="num text-[10px] uppercase tracking-wide text-secondary">
                   Unsaved changes
                 </span>
               </div>
             ) : (
-              <div className="flex items-center gap-2 animate-fade-in duration-300">
-                <svg className="w-3.5 h-3.5 text-accent-signal" viewBox="0 0 20 20" fill="currentColor">
+              <div className="flex items-center gap-2">
+                <svg className="h-3.5 w-3.5 text-accent-signal" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
-                <span className="text-[10px] uppercase tracking-wide font-mono text-accent-signal font-semibold">
+                <span className="num text-[10px] uppercase tracking-wide font-semibold text-accent-signal">
                   Changes persisted
                 </span>
               </div>
