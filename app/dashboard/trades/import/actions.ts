@@ -310,11 +310,10 @@ function rMultipleOrNull(t: {
   status: TradeStatus;
   direction: Direction;
 }): string | null {
-  const exitOrTarget = t.status === 'open' ? t.targetPrice : t.exitPrice;
   const r = computeRMultiple(
     t.entryPrice,
     t.stopPrice,
-    exitOrTarget,
+    t.exitPrice,
     t.direction,
   );
   return r == null ? null : String(r);

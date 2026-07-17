@@ -170,15 +170,14 @@ export function TradeForm({ tags, initialData }: TradeFormProps) {
 
   const rPreview = useMemo(
     () => {
-      const exitOrTarget = status === 'open' ? targetPrice : exitPrice;
       return computeRMultiple(
         parseNumber(entryPrice),
         parseNumber(stopPrice),
-        parseNumber(exitOrTarget),
+        parseNumber(exitPrice),
         direction,
       );
     },
-    [entryPrice, stopPrice, exitPrice, targetPrice, direction, status],
+    [entryPrice, stopPrice, exitPrice, direction],
   );
 
   // Net P&L = gross − commission − swap − fees. Live so the user sees the true

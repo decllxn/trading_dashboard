@@ -24,6 +24,7 @@ import { RiskStatGrid } from '@/components/dashboard/risk-stat-grid';
 import { EquityCurveChart } from '@/components/charts/equity-curve-chart';
 import { EquityComparisonChart } from '@/components/charts/equity-comparison-chart';
 import { RMultipleHistogram } from '@/components/charts/r-multiple-histogram';
+import { HourlyPnlChart } from '@/components/charts/hourly-pnl-chart';
 import { MoodChart } from '@/components/charts/mood-chart';
 import { getMarketData } from '@/lib/market-data';
 import type { StatTrade } from '@/lib/stats';
@@ -252,7 +253,8 @@ export default async function DashboardPage() {
         <MoodChart data={moodData} />
       </div>
 
-      <div className="mt-6">
+      <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <HourlyPnlChart trades={trades} />
         <RMultipleHistogram data={distributionData} />
       </div>
     </main>

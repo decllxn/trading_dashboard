@@ -179,8 +179,7 @@ export async function createTrade(
   const { errors, values, data } = validateTrade(formData);
   if (Object.keys(errors).length > 0) return { errors, values };
 
-  const exitOrTarget = data.status === 'open' ? data.targetPrice : data.exitPrice;
-  const rMultiple = computeRMultiple(data.entryPrice!, data.stopPrice, exitOrTarget, data.direction);
+  const rMultiple = computeRMultiple(data.entryPrice!, data.stopPrice, data.exitPrice, data.direction);
 
   const { data: tradeRow, error: tradeError } = await supabase
     .from('trades')
@@ -230,16 +229,22 @@ export async function updateTrade(
   _prev: TradeFormState,
   formData: FormData,
 ): Promise<TradeFormState> {
+  if (!isSupabaseConfigured()) return { formError: 'Supabase is not configured.' };
   const supabase = createServerClient();
   if (!supabase) return { formError: 'Database client unavailable.' };
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { formError: 'You must be signed in to update a trade.' };
 
   const { errors, values, data } = validateTrade(formData);
   if (Object.keys(errors).length > 0) return { errors, values };
 
-  const exitOrTarget = data.status === 'open' ? data.targetPrice : data.exitPrice;
-  const rMultiple = computeRMultiple(data.entryPrice!, data.stopPrice, exitOrTarget, data.direction);
+  const rMultiple = computeRMultiple(data.entryPrice!, data.stopPrice, data.exitPrice, data.direction);
 
-  const { error: tradeError } = await supabase
+  console.log(`[updateTrade] Updating trade ID: ${tradeId} for user: ${user.id}`);
+  console.log('[updateTrade] Data submitted:', JSON.stringify(data, null, 2));
+
+  const { data: updatedRows, error: tradeError } = await supabase
     .from('trades')
     .update({
       instrument: data.instrument,
@@ -263,9 +268,58 @@ export async function updateTrade(
       thirty_minute_pd_array: data.thirtyMinutePdArray || null,
       images: data.images,
     })
-    .eq('id', tradeId);
+    .eq('id', tradeId)
+    .select();
 
-  if (tradeError) return { values, formError: tradeError.message };
+  if (tradeError) {
+    console.error('[updateTrade] Error updating trade row:', tradeError.message);
+    return { values, formError: tradeError.message };
+  }
+
+  if (!updatedRows || updatedRows.length === 0) {
+    console.error('[updateTrade] No rows updated! RLS block or trade ID not found.');
+    return { values, formError: 'Failed to update trade: trade not found or access denied.' };
+  }
+
+  console.log('[updateTrade] Successfully updated trade row:', JSON.stringify(updatedRows[0], null, 2));
+
+  // Sync tags: delete existing links, fetch owned tags, insert new ones
+  const { error: deleteTagsError } = await supabase
+    .from('trade_tags')
+    .delete()
+    .eq('trade_id', tradeId);
+
+  if (deleteTagsError) {
+    console.error('[updateTrade] Error deleting trade tags:', deleteTagsError.message);
+    return { values, formError: deleteTagsError.message };
+  }
+
+  if (data.tagIds.length > 0) {
+    const { data: ownedTags, error: tagsFetchError } = await supabase
+      .from('tags')
+      .select('id')
+      .eq('user_id', user.id)
+      .in('id', data.tagIds);
+
+    if (tagsFetchError) {
+      console.error('[updateTrade] Error fetching owned tags:', tagsFetchError.message);
+      return { values, formError: tagsFetchError.message };
+    }
+
+    const ownedIds = (ownedTags ?? []).map((t) => t.id);
+    if (ownedIds.length > 0) {
+      const { error: insertTagsError } = await supabase
+        .from('trade_tags')
+        .insert(ownedIds.map((tagId) => ({ trade_id: tradeId, tag_id: tagId })));
+
+      if (insertTagsError) {
+        console.error('[updateTrade] Error inserting new trade tags:', insertTagsError.message);
+        return { values, formError: insertTagsError.message };
+      }
+    }
+  }
+
+  console.log('[updateTrade] Tags updated successfully.');
 
   revalidatePath('/dashboard/trades');
   redirect('/dashboard/trades');

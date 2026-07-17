@@ -20,7 +20,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <main className="bg-base flex min-h-screen flex-row">
+    <main className="bg-base flex h-screen flex-row overflow-hidden">
       {/* Console rail — mono system readouts, instrument-panel feel. */}
       <aside className="hidden w-64 shrink-0 flex-col justify-between border-r border-hairline px-6 py-8 md:flex">
         <div className="space-y-1">
@@ -40,8 +40,8 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         </div>
       </aside>
       {/* Form area — left-aligned, no enclosing card. */}
-      <div className="flex flex-1 items-center px-6 py-16 md:px-16">
-        <div className="w-full max-w-sm">{children}</div>
+      <div className="no-scrollbar flex flex-1 items-center overflow-y-auto h-full px-6 py-16 md:px-16">
+        <div className="w-full max-w-sm my-auto">{children}</div>
       </div>
     </main>
   );
