@@ -6,6 +6,7 @@ import {
 } from '@/lib/supabase';
 import { NavRail } from '@/components/shell/nav-rail';
 import { TopBar } from '@/components/shell/top-bar';
+import { CopilotProvider } from '@/components/copilot/copilot-provider';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,6 +45,18 @@ export default async function DashboardLayout({
     redirect('/login');
   }
 
+  const { data: connection } = await supabase
+    .from('broker_connections')
+    .select('broker_name, provider')
+    .eq('status', 'active')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const activeBrokerName = connection
+    ? (connection.broker_name || connection.provider)
+    : null;
+
   // Persistent app shell: rail + (top bar + content).
   // The frame persists across all /dashboard/* navigation; only {children}
   // re-renders on route change.
@@ -54,14 +67,17 @@ export default async function DashboardLayout({
   // charts overflow. z-40/z-30 establish the persistent layers so floating UI
   // (tooltips, the account menu) always paint above scrolling content.
   return (
-    <div className="bg-base flex h-screen overflow-hidden">
-      <NavRail />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="z-30 shrink-0">
-          <TopBar email={user.email ?? ''} />
+    <CopilotProvider>
+      <div className="bg-base flex h-screen overflow-hidden">
+        <NavRail />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="z-30 shrink-0">
+            <TopBar email={user.email ?? ''} activeBrokerName={activeBrokerName} />
+          </div>
+          <main className="no-scrollbar min-w-0 flex-1 overflow-y-auto">{children}</main>
         </div>
-        <main className="no-scrollbar min-w-0 flex-1 overflow-y-auto">{children}</main>
       </div>
-    </div>
+    </CopilotProvider>
   );
 }
+

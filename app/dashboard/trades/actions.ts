@@ -179,6 +179,16 @@ export async function createTrade(
   const { errors, values, data } = validateTrade(formData);
   if (Object.keys(errors).length > 0) return { errors, values };
 
+  const { data: activeConnection } = await supabase
+    .from('broker_connections')
+    .select('id')
+    .eq('status', 'active')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const brokerConnectionId = activeConnection ? activeConnection.id : null;
+
   const rMultiple = computeRMultiple(data.entryPrice!, data.stopPrice, data.exitPrice, data.direction);
 
   const { data: tradeRow, error: tradeError } = await supabase
@@ -206,6 +216,7 @@ export async function createTrade(
       one_hour_pd_array: data.oneHourPdArray || null,
       thirty_minute_pd_array: data.thirtyMinutePdArray || null,
       images: data.images,
+      broker_connection_id: brokerConnectionId,
     })
     .select('id')
     .single();

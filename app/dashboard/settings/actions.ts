@@ -2,11 +2,13 @@
 
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import {
-  createConnectionPortalUrl,
-  ensureSnaptradeUser,
-} from '@/lib/snaptrade';
+import { createConnectionPortalUrl, ensureSnaptradeUser } from '@/lib/snaptrade';
 import { createServerClient } from '@/lib/supabase';
+import { db } from '@/db';
+import { brokerConnections, trades } from '@/db/schema';
+import { computeRMultiple } from '@/lib/trades';
+import { revalidatePath } from 'next/cache';
+import { eq, and, isNull } from 'drizzle-orm';
 
 function callbackUrl(): string {
   const configuredOrigin = process.env.APP_URL;
@@ -101,4 +103,90 @@ export async function saveStartingBalance(
 
   return { success: true };
 }
+
+export async function connectMt5Broker(
+  brokerName: string,
+  accountRef: string,
+  serverName: string,
+): Promise<void> {
+  const supabase = createServerClient();
+  if (!supabase) throw new Error('Supabase not configured');
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Unauthorized');
+  if (!db) throw new Error('Database not configured');
+
+  const externalAccountId = `MT5-${accountRef}`;
+
+  // Insert broker connection without seeding mock trades
+  const [conn] = await db
+    .insert(brokerConnections)
+    .values({
+      userId: user.id,
+      provider: 'manual',
+      externalAccountId,
+      brokerName: `${brokerName} (${serverName})`,
+      status: 'active',
+      lastSyncedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: [
+        brokerConnections.userId,
+        brokerConnections.provider,
+        brokerConnections.externalAccountId,
+      ],
+      set: {
+        brokerName: `${brokerName} (${serverName})`,
+        status: 'active',
+        lastSyncedAt: new Date(),
+      }
+    })
+    .returning();
+
+  if (conn) {
+    // Link all existing trades for this user that don't have a brokerConnectionId
+    await db
+      .update(trades)
+      .set({ brokerConnectionId: conn.id })
+      .where(and(eq(trades.userId, user.id), isNull(trades.brokerConnectionId)));
+  }
+
+  revalidatePath('/dashboard/settings');
+  revalidatePath('/dashboard');
+}
+
+export async function purgeTradeDetails(): Promise<{ success: boolean; count?: number; error?: string }> {
+  const supabase = createServerClient();
+  if (!supabase) return { success: false, error: 'Supabase not configured' };
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: 'Unauthorized' };
+  if (!db) return { success: false, error: 'Database not configured' };
+
+  try {
+    const updated = await db
+      .update(trades)
+      .set({
+        entryPrice: null,
+        exitPrice: null,
+        stopPrice: null,
+        targetPrice: null,
+        size: null,
+        pnl: null,
+        commission: null,
+        swap: null,
+        fees: null,
+        rMultiple: null,
+      })
+      .where(eq(trades.userId, user.id))
+      .returning();
+
+    revalidatePath('/dashboard');
+    revalidatePath('/dashboard/trades');
+    return { success: true, count: updated.length };
+  } catch (err: any) {
+    console.error('Purge error:', err);
+    return { success: false, error: err.message || 'Failed to purge trade details' };
+  }
+}
+
+
 

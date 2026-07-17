@@ -433,3 +433,40 @@ export const marketDataCache = pgTable(
 export type MarketDataCache = typeof marketDataCache.$inferSelect;
 export type NewMarketDataCache = typeof marketDataCache.$inferInsert;
 
+/**
+ * copilot_sessions — chat session threads for the AI Copilot.
+ */
+export const copilotSessions = pgTable('copilot_sessions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull(),
+  title: text('title').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type CopilotSession = typeof copilotSessions.$inferSelect;
+export type NewCopilotSession = typeof copilotSessions.$inferInsert;
+
+/**
+ * copilot_messages — individual messages inside a Copilot session.
+ */
+export const copilotMessages = pgTable('copilot_messages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sessionId: uuid('session_id')
+    .notNull()
+    .references(() => copilotSessions.id, { onDelete: 'cascade' }),
+  role: text('role').notNull(), // 'user' | 'assistant'
+  content: text('content').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type CopilotMessage = typeof copilotMessages.$inferSelect;
+export type NewCopilotMessage = typeof copilotMessages.$inferInsert;
+
+

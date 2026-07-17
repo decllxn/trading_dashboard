@@ -1,8 +1,9 @@
-import { Button } from '@/components/button';
-import { connectBroker } from './actions';
+import { redirect } from 'next/navigation';
 import { StartingBalanceForm } from './starting-balance-form';
 import { createServerClient } from '@/lib/supabase';
 import { resolveStartingBalance } from '@/lib/stats';
+import { ConnectBrokerModal } from '@/components/settings/connect-broker-modal';
+import { PurgeDetailsButton } from '@/components/settings/purge-details-button';
 
 interface SettingsPageProps {
   searchParams: { broker?: string };
@@ -50,14 +51,17 @@ export default async function SettingsPage({
   searchParams,
 }: SettingsPageProps) {
   const supabase = createServerClient();
-  const { data: connections } = supabase
-    ? await supabase
-        .from('broker_connections')
-        .select(
-          'id, provider, external_account_id, broker_name, status, last_synced_at',
-        )
-        .order('created_at', { ascending: false })
-    : { data: [] };
+  if (!supabase) redirect('/login');
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+
+  const { data: connections } = await supabase
+    .from('broker_connections')
+    .select(
+      'id, provider, external_account_id, broker_name, status, last_synced_at',
+    )
+    .order('created_at', { ascending: false });
   const { data: settingsRow } = supabase
     ? await supabase
         .from('user_settings')
@@ -93,9 +97,7 @@ export default async function SettingsPage({
               workspace.
             </p>
           </div>
-          <form action={connectBroker}>
-            <Button type="submit">Connect a broker</Button>
-          </form>
+          <ConnectBrokerModal userId={user.id} />
         </div>
 
         {brokerMessage ? (
@@ -172,6 +174,20 @@ export default async function SettingsPage({
         </div>
         <div className="p-5">
           <StartingBalanceForm defaultValue={startingBalanceValue} />
+        </div>
+      </section>
+
+      <section className="mt-6 rounded-card border border-hairline bg-surface">
+        <div className="border-b border-hairline p-5">
+          <h2 className="font-display text-lg text-primary">
+            Database Maintenance
+          </h2>
+          <p className="mt-1 max-w-2xl text-sm text-secondary">
+            Purge exact numeric details like entry, stop, and exit prices, sizes, and PnL values for all your trades, while keeping your charts, annotations, images, and daily journal entry notes intact.
+          </p>
+        </div>
+        <div className="p-5">
+          <PurgeDetailsButton />
         </div>
       </section>
     </main>

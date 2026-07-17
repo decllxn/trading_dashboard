@@ -53,6 +53,7 @@ interface InsertRow {
   swap: string | null;
   fees: string | null;
   r_multiple: string | null;
+  broker_connection_id?: string | null;
 }
 
 /**
@@ -229,6 +230,16 @@ export async function commitImport(
   const { existing } = await listExistingTrades(user.id);
   const { newTrades, duplicates } = dedupeTrades(trades, existing);
 
+  const { data: activeConnection } = await supabase
+    .from('broker_connections')
+    .select('id')
+    .eq('status', 'active')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const brokerConnectionId = activeConnection ? activeConnection.id : null;
+
   if (newTrades.length > 0) {
     const rows: InsertRow[] = newTrades.map((t) => ({
       user_id: user.id,
@@ -249,6 +260,7 @@ export async function commitImport(
       swap: numOrNull(t.swap),
       fees: numOrNull(t.fees),
       r_multiple: rMultipleOrNull(t),
+      broker_connection_id: brokerConnectionId,
     }));
 
     const { error: insertError } = await supabase

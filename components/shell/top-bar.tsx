@@ -21,9 +21,10 @@ function Selector({ label }: { label: string }) {
 
 interface TopBarProps {
   email: string;
+  activeBrokerName?: string | null;
 }
 
-export function TopBar({ email }: TopBarProps) {
+export function TopBar({ email, activeBrokerName }: TopBarProps) {
   return (
     <header className="border-hairline bg-base flex h-14 items-center justify-between border-b px-4 sm:px-6">
       <div className="flex items-center gap-6">
@@ -35,7 +36,7 @@ export function TopBar({ email }: TopBarProps) {
         {/* Static placeholder selectors — hidden on mobile to keep the bar
             uncrowded (brand + account menu fit any width). */}
         <div className="hidden items-center gap-4 md:flex">
-          <Selector label="Paper · Alpaca" />
+          <Selector label={activeBrokerName || "Paper · Alpaca"} />
           <span className="border-hairline h-4 border-l" />
           <Selector label="1M" />
           <span className="border-hairline h-4 border-l" />
