@@ -1,10 +1,18 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import Link from 'next/link';
+import { ChevronLeft, ChevronRight, ArrowUpRight } from 'lucide-react';
 import type { StatTrade } from '@/lib/stats';
 import { cn } from '@/lib/utils';
 import { pnlColorClass, formatR } from '@/lib/trades';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 
 interface TradingCalendarProps {
   trades: ReadonlyArray<StatTrade>;
@@ -47,6 +55,39 @@ function formatCalendarPnl(value: number): string {
 
 export function TradingCalendar({ trades }: TradingCalendarProps) {
   const [currentDate, setCurrentDate] = useState(() => new Date());
+  const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
+
+  const selectedDateLabel = useMemo(() => {
+    if (!selectedDateKey) return '';
+    const [y, m, d] = selectedDateKey.split('-').map(Number);
+    const date = new Date(y, m - 1, d);
+    return date.toLocaleDateString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  }, [selectedDateKey]);
+
+  const selectedDateTrades = useMemo(() => {
+    if (!selectedDateKey) return [];
+    return trades.filter((t) => {
+      if (t.status === 'open' || t.pnl == null || t.entryTime == null) return false;
+      const date = new Date(t.entryTime);
+      return !Number.isNaN(date.getTime()) && getLocalDateKey(date) === selectedDateKey;
+    });
+  }, [trades, selectedDateKey]);
+
+  const selectedDateTotals = useMemo(() => {
+    let pnl = 0;
+    let rMultiple = 0;
+    let count = 0;
+    for (const t of selectedDateTrades) {
+      pnl += t.pnl || 0;
+      rMultiple += t.rMultiple || 0;
+      count += 1;
+    }
+    return { pnl, rMultiple, count };
+  }, [selectedDateTrades]);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -273,10 +314,12 @@ export function TradingCalendar({ trades }: TradingCalendarProps) {
                   return (
                     <div
                       key={day.dateKey}
+                      onClick={() => hasTrades && setSelectedDateKey(day.dateKey)}
                       className={cn(
                         'relative flex min-h-[84px] flex-col justify-between border rounded-card p-2 transition-colors duration-150',
                         cellBgClass,
-                        !day.isCurrentMonth && 'opacity-30'
+                        !day.isCurrentMonth && 'opacity-30',
+                        hasTrades && 'cursor-pointer hover:border-accent-signal/40'
                       )}
                     >
                       {/* Day Number Label */}
@@ -288,7 +331,7 @@ export function TradingCalendar({ trades }: TradingCalendarProps) {
                       {hasTrades ? (
                         <div className="mt-1 flex flex-col items-end w-full">
                           {/* Daily PnL */}
-                          <span className={cn('num text-xs font-bold leading-tight font-mono', pnlColor)}>
+                          <span className={cn('num text-xs font-bold leading-tight font-mono', pnlColorClass(summary.pnl))}>
                             {formatCalendarPnl(summary.pnl)}
                           </span>
                           
@@ -347,6 +390,121 @@ export function TradingCalendar({ trades }: TradingCalendarProps) {
           })}
         </div>
       </div>
+
+      <Dialog open={selectedDateKey !== null} onOpenChange={(open) => !open && setSelectedDateKey(null)}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Trades on {selectedDateLabel}</DialogTitle>
+            <DialogDescription>
+              Review executions, net P&amp;L, and R-multiple scores realized on this day.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Totals Summary */}
+          <div className="grid grid-cols-3 gap-3 my-4">
+            <div className="border-hairline bg-base rounded-card border px-4 py-3">
+              <span className="text-tertiary block text-[9px] uppercase tracking-wider font-display mb-1">
+                Net P&amp;L
+              </span>
+              <span className={cn('num text-base font-semibold font-mono', pnlColorClass(selectedDateTotals.pnl))}>
+                {formatCalendarPnl(selectedDateTotals.pnl)}
+              </span>
+            </div>
+            <div className="border-hairline bg-base rounded-card border px-4 py-3">
+              <span className="text-tertiary block text-[9px] uppercase tracking-wider font-display mb-1">
+                Daily R-Multiple
+              </span>
+              <span className={cn('num text-base font-semibold font-mono', selectedDateTotals.rMultiple > 0 ? 'text-gain' : selectedDateTotals.rMultiple < 0 ? 'text-loss' : 'text-tertiary')}>
+                {selectedDateTotals.rMultiple > 0 ? '+' : ''}{selectedDateTotals.rMultiple.toFixed(2)}R
+              </span>
+            </div>
+            <div className="border-hairline bg-base rounded-card border px-4 py-3">
+              <span className="text-tertiary block text-[9px] uppercase tracking-wider font-display mb-1">
+                Total Executions
+              </span>
+              <span className="num text-primary text-base font-semibold font-mono">
+                {selectedDateTotals.count} {selectedDateTotals.count === 1 ? 'trade' : 'trades'}
+              </span>
+            </div>
+          </div>
+
+          {/* Details Table */}
+          <div className="border-hairline bg-base rounded-card border overflow-hidden">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-hairline/60 bg-surface/50">
+                  <th className="text-tertiary text-[9px] uppercase tracking-wider font-display px-4 py-3 font-normal">
+                    Instrument
+                  </th>
+                  <th className="text-tertiary text-[9px] uppercase tracking-wider font-display px-4 py-3 font-normal">
+                    Direction
+                  </th>
+                  <th className="text-tertiary text-[9px] uppercase tracking-wider font-display px-4 py-3 font-normal text-right">
+                    Size
+                  </th>
+                  <th className="text-tertiary text-[9px] uppercase tracking-wider font-display px-4 py-3 font-normal text-right">
+                    Entry Price
+                  </th>
+                  <th className="text-tertiary text-[9px] uppercase tracking-wider font-display px-4 py-3 font-normal text-right">
+                    Exit Price
+                  </th>
+                  <th className="text-tertiary text-[9px] uppercase tracking-wider font-display px-4 py-3 font-normal text-right">
+                    Net P&amp;L
+                  </th>
+                  <th className="text-tertiary text-[9px] uppercase tracking-wider font-display px-4 py-3 font-normal text-right">
+                    R
+                  </th>
+                  <th className="text-tertiary text-[9px] uppercase tracking-wider font-display px-4 py-3 font-normal text-right">
+                    Action
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedDateTrades.map((trade) => (
+                  <tr key={trade.id} className="border-b border-hairline/30 last:border-0 hover:bg-surface-raised/40 transition-colors duration-150">
+                    <td className="px-4 py-3 text-xs font-sans text-primary font-medium">
+                      {trade.instrument}
+                    </td>
+                    <td className="px-4 py-3 text-xs font-sans">
+                      <span className={cn(
+                        'text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-[3px] border',
+                        trade.direction === 'long' 
+                          ? 'text-gain bg-[#34D399]/5 border-[#34D399]/15' 
+                          : 'text-loss bg-[#F87171]/5 border-[#F87171]/15'
+                      )}>
+                        {trade.direction}
+                      </span>
+                    </td>
+                    <td className="num px-4 py-3 text-right text-xs text-primary font-mono">
+                      {trade.size != null ? trade.size.toFixed(2) : '—'}
+                    </td>
+                    <td className="num px-4 py-3 text-right text-xs text-secondary font-mono">
+                      {trade.entryPrice != null ? trade.entryPrice.toFixed(2) : '—'}
+                    </td>
+                    <td className="num px-4 py-3 text-right text-xs text-secondary font-mono">
+                      {trade.exitPrice != null ? trade.exitPrice.toFixed(2) : '—'}
+                    </td>
+                    <td className={cn('num px-4 py-3 text-right text-xs font-semibold font-mono', pnlColorClass(trade.pnl))}>
+                      {trade.pnl != null ? (trade.pnl > 0 ? '+' : '') + trade.pnl.toFixed(2) : '—'}
+                    </td>
+                    <td className={cn('num px-4 py-3 text-right text-xs font-semibold font-mono', trade.rMultiple && trade.rMultiple > 0 ? 'text-gain' : trade.rMultiple && trade.rMultiple < 0 ? 'text-loss' : 'text-tertiary')}>
+                      {trade.rMultiple != null ? (trade.rMultiple > 0 ? '+' : '') + trade.rMultiple.toFixed(2) + 'R' : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right text-xs">
+                      <Link 
+                        href={`/dashboard/trades/${trade.id}`}
+                        className="text-accent-signal hover:underline inline-flex items-center gap-1 font-medium cursor-pointer"
+                      >
+                        View <ArrowUpRight size={12} />
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

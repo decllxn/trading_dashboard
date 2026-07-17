@@ -1,8 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
-import { TradeChart } from '@/components/charts/trade-chart';
-import type { ChartAnnotation } from '@/db/schema';
-import { formatPrice, formatR, formatPnl, pnlColorClass, rColorClass } from '@/lib/trades';
+import { formatPrice, formatR, formatPnl, rColorClass } from '@/lib/trades';
+import { pnlColorClass } from '@/lib/trades'; // keep imports clean
 import { computeNetPnl } from '@/lib/stats';
 import { cn } from '@/lib/utils';
 import { ArrowLeft } from 'lucide-react';
@@ -45,11 +44,6 @@ export default async function TradeDetailPage({
     .single();
 
   if (error || !trade) notFound();
-
-  // Load annotations
-  const annotations: ChartAnnotation[] = trade.annotations 
-    ? (trade.annotations as unknown as ChartAnnotation[])
-    : [];
 
   // Load user settings for session
   const { data: userSettings } = await supabase
@@ -121,18 +115,18 @@ export default async function TradeDetailPage({
       </header>
 
       <div className="flex flex-col flex-1 overflow-hidden lg:flex-row">
-        {/* Main Chart Area + Screenshots */}
-        <div className="flex-1 overflow-y-auto bg-base p-2 sm:p-4 lg:border-r border-b border-hairline lg:border-b-0">
-          <div className="min-h-[350px] sm:min-h-[450px]">
-            <TradeChart 
-              trade={trade as any} 
-              initialAnnotations={annotations} 
-              sessionsEnabled={sessionsEnabled} 
-            />
-          </div>
-          {trade.images && trade.images.length > 0 && (
-            <div className="border-t border-hairline pt-6 mt-6 pb-6">
+        {/* Main Center Area: Screenshots */}
+        <div className="flex-1 overflow-y-auto bg-base p-4 lg:border-r border-b border-hairline lg:border-b-0">
+          {trade.images && trade.images.length > 0 ? (
+            <div className="space-y-4">
+              <h2 className="font-display text-primary text-xs uppercase tracking-wide mb-2">
+                Trade Screenshots
+              </h2>
               <ScreenshotGallery images={trade.images} />
+            </div>
+          ) : (
+            <div className="flex h-full min-h-[350px] items-center justify-center border border-dashed border-hairline rounded-card bg-surface/30">
+              <p className="text-secondary text-sm">No screenshots uploaded for this trade.</p>
             </div>
           )}
         </div>

@@ -28,6 +28,7 @@
  */
 /** Minimal trade shape consumed by stat functions (subset of TradeRow). */
 export interface StatTrade {
+  id?: string;
   /**
    * Signed realized P&L in account currency. Callers should pass NET P&L
    * (gross − commission − swap − fees) so every stat reflects true realized
@@ -39,6 +40,8 @@ export interface StatTrade {
   rMultiple?: number | null;
   /** ISO entry timestamp. Null trades land on an "unknown day" bucket. */
   entryTime?: string | null;
+  /** ISO exit timestamp. */
+  exitTime?: string | null;
   /** Only 'closed' trades contribute to realized stats. */
   status?: string;
   /** Per-trade carrying costs. Optional: present when the caller wants the
@@ -48,6 +51,12 @@ export interface StatTrade {
   fees?: number | null;
   /** Ticker / symbol name (e.g. AAPL, XAUUSD) for allocation analysis. */
   instrument?: string | null;
+  direction?: string | null;
+  entryPrice?: number | null;
+  exitPrice?: number | null;
+  size?: number | null;
+  stopPrice?: number | null;
+  targetPrice?: number | null;
 }
 
 /**

@@ -69,7 +69,7 @@ export default async function DashboardPage() {
 
   const { data: rawTrades, error } = await supabase
     .from('trades')
-    .select('pnl, commission, swap, fees, r_multiple, entry_time, status, instrument')
+    .select('id, pnl, commission, swap, fees, r_multiple, entry_time, exit_time, status, instrument, direction, entry_price, exit_price, size, stop_price, target_price')
     .eq('user_id', user.id);
 
   if (error) {
@@ -96,28 +96,44 @@ export default async function DashboardPage() {
     : STARTING_BALANCE_DEFAULT;
 
   const trades: StatTrade[] = ((rawTrades ?? []) as Array<{
+    id: string;
     pnl: string | null;
     commission: string | null;
     swap: string | null;
     fees: string | null;
     r_multiple: string | null;
     entry_time: string | null;
+    exit_time: string | null;
     status: string;
     instrument: string;
+    direction: string | null;
+    entry_price: string | null;
+    exit_price: string | null;
+    size: string | null;
+    stop_price: string | null;
+    target_price: string | null;
   }>).map((t) => {
     const gross = toNumber(t.pnl);
     const commission = toNumber(t.commission);
     const swap = toNumber(t.swap);
     const fees = toNumber(t.fees);
     return {
+      id: t.id,
       pnl: computeNetPnl(gross, commission, swap, fees),
       rMultiple: toNumber(t.r_multiple),
       entryTime: t.entry_time,
+      exitTime: t.exit_time,
       status: t.status,
       commission,
       swap,
       fees,
       instrument: t.instrument,
+      direction: t.direction,
+      entryPrice: toNumber(t.entry_price),
+      exitPrice: toNumber(t.exit_price),
+      size: toNumber(t.size),
+      stopPrice: toNumber(t.stop_price),
+      targetPrice: toNumber(t.target_price),
     };
   });
 
