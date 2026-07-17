@@ -21,10 +21,12 @@ import {
 import { EdgeScoreGauge } from '@/components/dashboard/edge-score-gauge';
 import { StatGrid } from '@/components/dashboard/stat-grid';
 import { RiskStatGrid } from '@/components/dashboard/risk-stat-grid';
+import { TradingCalendar } from '@/components/dashboard/trading-calendar';
 import { EquityCurveChart } from '@/components/charts/equity-curve-chart';
 import { EquityComparisonChart } from '@/components/charts/equity-comparison-chart';
 import { RMultipleHistogram } from '@/components/charts/r-multiple-histogram';
 import { HourlyPnlChart } from '@/components/charts/hourly-pnl-chart';
+import { AllocationChart } from '@/components/charts/allocation-chart';
 import { MoodChart } from '@/components/charts/mood-chart';
 import { getMarketData } from '@/lib/market-data';
 import type { StatTrade } from '@/lib/stats';
@@ -67,7 +69,7 @@ export default async function DashboardPage() {
 
   const { data: rawTrades, error } = await supabase
     .from('trades')
-    .select('pnl, commission, swap, fees, r_multiple, entry_time, status')
+    .select('pnl, commission, swap, fees, r_multiple, entry_time, status, instrument')
     .eq('user_id', user.id);
 
   if (error) {
@@ -101,6 +103,7 @@ export default async function DashboardPage() {
     r_multiple: string | null;
     entry_time: string | null;
     status: string;
+    instrument: string;
   }>).map((t) => {
     const gross = toNumber(t.pnl);
     const commission = toNumber(t.commission);
@@ -114,6 +117,7 @@ export default async function DashboardPage() {
       commission,
       swap,
       fees,
+      instrument: t.instrument,
     };
   });
 
@@ -244,6 +248,10 @@ export default async function DashboardPage() {
         />
       </div>
 
+      <div className="mt-6">
+        <TradingCalendar trades={trades} />
+      </div>
+
       <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
         <EquityComparisonChart 
           userReturnSeries={userReturnSeries} 
@@ -256,6 +264,10 @@ export default async function DashboardPage() {
       <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
         <HourlyPnlChart trades={trades} />
         <RMultipleHistogram data={distributionData} />
+      </div>
+
+      <div className="mt-6">
+        <AllocationChart trades={trades} />
       </div>
     </main>
   );

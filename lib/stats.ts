@@ -46,6 +46,8 @@ export interface StatTrade {
   commission?: number | null;
   swap?: number | null;
   fees?: number | null;
+  /** Ticker / symbol name (e.g. AAPL, XAUUSD) for allocation analysis. */
+  instrument?: string | null;
 }
 
 /**
