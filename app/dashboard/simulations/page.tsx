@@ -49,6 +49,32 @@ export default async function SimulationsPage() {
     .map(t => Number(t.r_multiple))
     .filter(n => !Number.isNaN(n));
 
+  // Query saved simulations
+  const db = (await import('@/db')).db;
+  const { simulations: simulationsSchema } = await import('@/db/schema');
+  const { eq, desc } = await import('drizzle-orm');
+
+  let savedSimulations: any[] = [];
+  if (db) {
+    const rows = await db
+      .select()
+      .from(simulationsSchema)
+      .where(eq(simulationsSchema.userId, user.id))
+      .orderBy(desc(simulationsSchema.createdAt));
+
+    savedSimulations = rows.map((s) => ({
+      id: s.id,
+      name: s.name,
+      numSimulations: s.numSimulations,
+      numTrades: s.numTrades,
+      riskPerTrade: Number(s.riskPerTrade),
+      ruinThreshold: Number(s.ruinThreshold),
+      mcResult: s.mcResult,
+      sizingResult: s.sizingResult,
+      createdAt: s.createdAt.toISOString(),
+    }));
+  }
+
   return (
     <main className="px-4 py-6 bg-base sm:px-6 min-h-screen">
       <div className="mb-6">
@@ -58,7 +84,10 @@ export default async function SimulationsPage() {
         </p>
       </div>
 
-      <SimulationsClient initialRMultiples={rMultiples} />
+      <SimulationsClient 
+        initialRMultiples={rMultiples} 
+        savedSimulations={savedSimulations}
+      />
     </main>
   );
 }

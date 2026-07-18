@@ -9,6 +9,7 @@ import {
   FlaskConical,
   LayoutDashboard,
   Settings,
+  Trophy,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -51,6 +52,12 @@ const NAV_ITEMS: NavItem[] = [
     href: '/dashboard/copilot',
     icon: Bot,
     match: (p) => p.startsWith('/dashboard/copilot'),
+  },
+  {
+    label: 'Best Trades',
+    href: '/dashboard/best-trades',
+    icon: Trophy,
+    match: (p) => p.startsWith('/dashboard/best-trades'),
   },
   {
     label: 'Settings',

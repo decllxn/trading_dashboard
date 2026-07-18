@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"next dev\" \"pnpm sim:start\"",
+    "dev": "concurrently -k -s first \"next dev\" \"pnpm sim:start\"",
+    "dev:clean": "powershell -Command \"Stop-Process -Id (Get-NetTCPConnection -LocalPort 3000,8000 -ErrorAction SilentlyContinue).OwningProcess -Force -ErrorAction SilentlyContinue; Write-Host 'Cleared ports 3000 and 8000 successfully'\"",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

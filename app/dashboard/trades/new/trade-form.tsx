@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useFormState } from 'react-dom';
 import Link from 'next/link';
 import { Field, Input, Label, Select } from '@/components/field';
@@ -117,10 +117,7 @@ export function TradeForm({ tags, initialData }: TradeFormProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
+  const uploadFiles = async (files: FileList | File[]) => {
     if (uploadedImages.length + files.length > 3) {
       setUploadError("You can only upload up to 3 screenshots.");
       return;
@@ -142,7 +139,7 @@ export function TradeForm({ tags, initialData }: TradeFormProps) {
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const fileExt = file.name.split('.').pop();
+        const fileExt = file.name ? file.name.split('.').pop() : 'png';
         const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`;
         const filePath = `screenshots/${fileName}`;
 
@@ -167,6 +164,41 @@ export function TradeForm({ tags, initialData }: TradeFormProps) {
       setIsUploading(false);
     }
   };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      uploadFiles(files);
+    }
+  };
+
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      const filesToUpload: File[] = [];
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          const file = items[i].getAsFile();
+          if (file) {
+            filesToUpload.push(file);
+          }
+        }
+      }
+
+      if (filesToUpload.length > 0) {
+        e.preventDefault();
+        uploadFiles(filesToUpload);
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => {
+      window.removeEventListener('paste', handlePaste);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uploadedImages]);
 
   const rPreview = useMemo(
     () => {
