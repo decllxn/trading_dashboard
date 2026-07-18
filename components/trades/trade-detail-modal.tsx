@@ -11,6 +11,8 @@ import {
   formatR,
   pnlColorClass,
   rColorClass,
+  calculateTradeRisk,
+  formatRisk,
 } from '@/lib/trades';
 import { deleteTrade } from '@/app/dashboard/trades/actions';
 import { ScreenshotGallery } from './screenshot-gallery';
@@ -124,10 +126,16 @@ export function TradeDetailModal({ trade, onClose }: TradeDetailModalProps) {
                 Levels
               </h3>
               <dl className="space-y-2 text-xs">
-                <DetailRow label="Entry Price" value={formatPrice(trade.entryPrice)} isMono />
-                {isClosed && <DetailRow label="Exit Price" value={formatPrice(trade.exitPrice)} isMono />}
-                <DetailRow label="Stop Price" value={formatPrice(trade.stopPrice)} isMono />
-                <DetailRow label="Target Price" value={formatPrice(trade.targetPrice)} isMono />
+                <DetailRow label="Entry Price" value={formatPrice(trade.entryPrice, trade.assetClass)} isMono />
+                {isClosed && <DetailRow label="Exit Price" value={formatPrice(trade.exitPrice, trade.assetClass)} isMono />}
+                <DetailRow label="Stop Price" value={formatPrice(trade.stopPrice, trade.assetClass)} isMono />
+                <DetailRow label="Target Price" value={formatPrice(trade.targetPrice, trade.assetClass)} isMono />
+                <DetailRow
+                  label="Calculated Risk"
+                  value={formatRisk(calculateTradeRisk(trade.instrument, trade.size, trade.entryPrice, trade.stopPrice, trade.assetClass))}
+                  valueClass="text-accent-signal"
+                  isMono
+                />
               </dl>
             </div>
 

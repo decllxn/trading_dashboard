@@ -1,7 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
-import { formatPrice, formatR, formatPnl, rColorClass } from '@/lib/trades';
-import { pnlColorClass } from '@/lib/trades'; // keep imports clean
+import { formatPrice, formatR, formatPnl, rColorClass, calculateTradeRisk, formatRisk, pnlColorClass } from '@/lib/trades';
+import type { AssetClass } from '@/db/schema'; // keep imports clean
 import { computeNetPnl } from '@/lib/stats';
 import { cn } from '@/lib/utils';
 import { ArrowLeft } from 'lucide-react';
@@ -147,6 +147,46 @@ export default async function TradeDetailPage({
               </dl>
             </div>
           ) : null}
+
+          <div className="p-4 border-b border-hairline">
+            <h2 className="font-display text-primary text-sm uppercase tracking-wide mb-3">Sizing &amp; Levels</h2>
+            <dl className="space-y-2 text-sm font-mono">
+              <div className="flex items-center justify-between">
+                <dt className="text-secondary text-xs">Position Size</dt>
+                <dd className="text-primary text-right text-xs font-medium">{trade.size != null ? Number(trade.size).toLocaleString() : '—'}</dd>
+              </div>
+              <div className="flex items-center justify-between">
+                <dt className="text-secondary text-xs">Entry Price</dt>
+                <dd className="text-primary text-right text-xs font-medium">{formatPrice(trade.entry_price != null ? Number(trade.entry_price) : null, trade.asset_class as AssetClass)}</dd>
+              </div>
+              {trade.exit_price != null && (
+                <div className="flex items-center justify-between">
+                  <dt className="text-secondary text-xs">Exit Price</dt>
+                  <dd className="text-primary text-right text-xs font-medium">{formatPrice(Number(trade.exit_price), trade.asset_class as AssetClass)}</dd>
+                </div>
+              )}
+              {trade.stop_price != null && (
+                <div className="flex items-center justify-between">
+                  <dt className="text-secondary text-xs">Stop Price</dt>
+                  <dd className="text-primary text-right text-xs font-medium">{formatPrice(Number(trade.stop_price), trade.asset_class as AssetClass)}</dd>
+                </div>
+              )}
+              {trade.target_price != null && (
+                <div className="flex items-center justify-between">
+                  <dt className="text-secondary text-xs">Target Price</dt>
+                  <dd className="text-primary text-right text-xs font-medium">{formatPrice(Number(trade.target_price), trade.asset_class as AssetClass)}</dd>
+                </div>
+              )}
+              {trade.entry_price != null && trade.stop_price != null && trade.size != null && (
+                <div className="flex items-center justify-between border-t border-hairline/30 pt-2 mt-2 font-sans">
+                  <dt className="text-secondary text-xs">Calculated Risk</dt>
+                  <dd className="text-accent-signal text-right text-xs font-semibold">
+                    {formatRisk(calculateTradeRisk(trade.instrument, Number(trade.size), Number(trade.entry_price), Number(trade.stop_price), trade.asset_class as AssetClass))}
+                  </dd>
+                </div>
+              )}
+            </dl>
+          </div>
 
           {(trade.daily_pd_array || trade.one_hour_pd_array || trade.thirty_minute_pd_array) ? (
             <div className="p-4 border-b border-hairline">

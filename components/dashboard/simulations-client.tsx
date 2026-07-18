@@ -173,14 +173,21 @@ export function SimulationsClient({ initialRMultiples, savedSimulations }: Simul
           let totalMaxWinStreak = 0;
           const finalRList: number[] = [];
 
+          // Initialize steps tracking for all paths
+          const stepValues: number[][] = Array.from({ length: streakTrades + 1 }, () => []);
+          for (let t = 0; t <= streakTrades; t++) {
+            stepValues[t] = [];
+          }
+
           for (let s = 0; s < paths; s++) {
             let currentLoss = 0;
             let currentWin = 0;
             let maxLoss = 0;
             let maxWin = 0;
             let finalR = 0;
+            stepValues[0].push(0);
 
-            for (let t = 0; t < streakTrades; t++) {
+            for (let t = 1; t <= streakTrades; t++) {
               if (Math.random() < p) {
                 finalR += rw;
                 currentWin++;
@@ -192,6 +199,7 @@ export function SimulationsClient({ initialRMultiples, savedSimulations }: Simul
                 currentWin = 0;
                 if (currentLoss > maxLoss) maxLoss = currentLoss;
               }
+              stepValues[t].push(finalR);
             }
             finalRList.push(finalR);
             totalMaxLossStreak += maxLoss;
@@ -209,6 +217,37 @@ export function SimulationsClient({ initialRMultiples, savedSimulations }: Simul
           const p10R = finalRList[Math.floor(paths * 0.1)];
           const p50R = finalRList[Math.floor(paths * 0.5)];
           const p90R = finalRList[Math.floor(paths * 0.9)];
+
+          // Compute step percentiles, EV, and SD bounds
+          const singleEV = p * rw - (1 - p) * rl;
+          const varSingle = p * Math.pow(rw - singleEV, 2) + (1 - p) * Math.pow(-rl - singleEV, 2);
+          const sdSingle = Math.sqrt(varSingle);
+
+          const percentileCurves = [];
+          for (let t = 0; t <= streakTrades; t++) {
+            const vals = stepValues[t];
+            vals.sort((a, b) => a - b);
+            const p10 = vals[Math.floor(paths * 0.1)];
+            const p25 = vals[Math.floor(paths * 0.25)];
+            const p50 = vals[Math.floor(paths * 0.5)];
+            const p75 = vals[Math.floor(paths * 0.75)];
+            const p90 = vals[Math.floor(paths * 0.9)];
+
+            const expected = t * singleEV;
+            const sdAtStep = sdSingle * Math.sqrt(t);
+
+            percentileCurves.push({
+              trade_index: t,
+              p10,
+              p25,
+              p50,
+              p75,
+              p90,
+              expected,
+              plus1sd: expected + sdAtStep,
+              minus1sd: expected - sdAtStep
+            });
+          }
 
           setStreakResult({
             type: 'streak',
@@ -231,7 +270,8 @@ export function SimulationsClient({ initialRMultiples, savedSimulations }: Simul
               p10R,
               p50R,
               p90R,
-            }
+            },
+            percentile_curves: percentileCurves
           });
           setMcResult(null);
           setSizingResult(null);
@@ -1064,6 +1104,119 @@ export function SimulationsClient({ initialRMultiples, savedSimulations }: Simul
                         <p className="mt-0.5 text-accent-signal font-medium">{activeInsights.recommendation}</p>
                       </div>
                     )}
+                  </div>
+                </div>
+              )}
+
+              {/* Fan Chart Component for Streak Sizing */}
+              {activeStreakResult.percentile_curves && (
+                <div className="border-hairline bg-surface rounded-card border p-4">
+                  <h3 className="font-display text-primary text-xs uppercase tracking-wide mb-4">
+                    R-Multiple Growth Projections & Variance Bands
+                  </h3>
+                  <div className="h-[300px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart
+                        data={activeStreakResult.percentile_curves}
+                        margin={{ top: 5, right: 5, left: -20, bottom: 5 }}
+                      >
+                        <CartesianGrid stroke="#242931" strokeDasharray="3 3" vertical={false} />
+                        <XAxis
+                          dataKey="trade_index"
+                          stroke="#8B93A1"
+                          fontSize={10}
+                          tickLine={false}
+                          axisLine={false}
+                        />
+                        <YAxis
+                          stroke="#8B93A1"
+                          fontSize={10}
+                          tickLine={false}
+                          axisLine={false}
+                          tickFormatter={(value) => `${value >= 0 ? '+' : ''}${value.toFixed(0)}R`}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#14171C',
+                            border: '1px solid #242931',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            fontFamily: 'var(--font-mono)'
+                          }}
+                          labelStyle={{ color: '#E8EAED', fontWeight: 'bold' }}
+                          itemStyle={{ padding: '2px 0' }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="p90"
+                          name="90th Percentile (Optimal)"
+                          stroke="#565D68"
+                          strokeDasharray="3 3"
+                          dot={false}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="plus1sd"
+                          name="+1 Std Dev (+1σ)"
+                          stroke="#34D399"
+                          strokeDasharray="5 5"
+                          opacity={0.7}
+                          dot={false}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="expected"
+                          name="Expected Value (Regression Line)"
+                          stroke="#4FD1C5"
+                          strokeWidth={2.5}
+                          dot={false}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="p50"
+                          name="50th Percentile (Median)"
+                          stroke="#4FD1C5"
+                          strokeDasharray="3 3"
+                          opacity={0.8}
+                          dot={false}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="minus1sd"
+                          name="-1 Std Dev (-1σ)"
+                          stroke="#F87171"
+                          strokeDasharray="5 5"
+                          opacity={0.7}
+                          dot={false}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="p10"
+                          name="10th Percentile (Adverse)"
+                          stroke="#565D68"
+                          strokeDasharray="3 3"
+                          dot={false}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-center gap-6 mt-4 text-[10px] text-secondary font-display">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-3 h-0.5 border-t border-dashed border-accent-signal block" />
+                      <span>Expected Return (Expectancy Regression)</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-3 h-0.5 border-t border-dashed border-gain block" />
+                      <span>+1 Standard Deviation (+1σ Band)</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-3 h-0.5 border-t border-dashed border-loss block" />
+                      <span>-1 Standard Deviation (-1σ Band)</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-3 h-0.5 border-t border-dashed border-tertiary block" />
+                      <span>10th / 90th Percentile Variance Boundaries</span>
+                    </div>
                   </div>
                 </div>
               )}

@@ -14,6 +14,8 @@ import {
   pnlColorClass,
   rColorClass,
   sortTrades,
+  calculateTradeRisk,
+  formatRisk,
   type TradeFilters,
   type TradeRow,
   type TradeSort,
@@ -215,8 +217,15 @@ function TradeTableRow({
         </div>
       </td>
       <td className="text-secondary px-3 py-2.5">{capitalize(trade.direction)}</td>
-      <td className="num px-3 py-2.5 text-right">{formatPrice(trade.entryPrice)}</td>
-      <td className="num px-3 py-2.5 text-right">{formatPrice(trade.exitPrice)}</td>
+      <td className="num px-3 py-2.5 text-right">
+        <div>{formatPrice(trade.entryPrice, trade.assetClass)}</div>
+        {trade.entryPrice != null && trade.stopPrice != null && trade.size != null && (
+          <div className="text-[10px] text-tertiary font-mono">
+            {formatRisk(calculateTradeRisk(trade.instrument, trade.size, trade.entryPrice, trade.stopPrice, trade.assetClass))}
+          </div>
+        )}
+      </td>
+      <td className="num px-3 py-2.5 text-right">{formatPrice(trade.exitPrice, trade.assetClass)}</td>
       <td
         className={cn('num px-3 py-2.5 text-right', pnlColorClass(trade.pnl))}
         title={pnlTitle(trade)}

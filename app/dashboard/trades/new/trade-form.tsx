@@ -18,12 +18,16 @@ import {
   parseNumber,
   pnlColorClass,
   rColorClass,
+  calculateTradeRisk,
+  formatRisk,
+  calculatePositionSize,
+  PEPPERSTONE_SPECS,
 } from '@/lib/trades';
 import { computeNetPnl } from '@/lib/stats';
 import type { AssetClass, Direction, Tag, TradeStatus } from '@/db/schema';
 import { createBrowserClient } from '@supabase/ssr';
 import { cn } from '@/lib/utils';
-import { UploadCloud, X, Loader2 } from 'lucide-react';
+import { UploadCloud, X, Loader2, Sliders } from 'lucide-react';
 
 /** Shape of the trade data passed in for edit mode. */
 export interface TradeInitialData {
@@ -86,6 +90,16 @@ export function TradeForm({ tags, initialData }: TradeFormProps) {
     (v.status as TradeStatus) || initialData?.status || 'open',
   );
 
+  const [instrument, setInstrument] = useState(
+    v.instrument ?? initialData?.instrument ?? '',
+  );
+  const [assetClass, setAssetClass] = useState<AssetClass>(
+    (v.assetClass as AssetClass) || (initialData?.assetClass as AssetClass) || 'equity',
+  );
+  const [size, setSize] = useState(
+    v.size ?? initialData?.size ?? '',
+  );
+
   const [entryPrice, setEntryPrice] = useState(
     v.entryPrice ?? initialData?.entryPrice ?? '',
   );
@@ -98,6 +112,15 @@ export function TradeForm({ tags, initialData }: TradeFormProps) {
   const [targetPrice, setTargetPrice] = useState(
     v.targetPrice ?? initialData?.targetPrice ?? '',
   );
+
+  // Pepperstone CFD Sizing Calculator states
+  const [showCalculator, setShowCalculator] = useState(false);
+  const [calcBalance, setCalcBalance] = useState('10000');
+  const [calcRiskMode, setCalcRiskMode] = useState<'percent' | 'cash'>('percent');
+  const [calcRiskValue, setCalcRiskValue] = useState('1.0');
+  const [calcExchangeRate, setCalcExchangeRate] = useState('');
+  const [calcContractSize, setCalcContractSize] = useState('');
+  const [calcLeverage, setCalcLeverage] = useState('30');
 
   // Carrying costs — optional, default empty. Drives the live net P&L readout.
   const [pnl, setPnl] = useState(v.pnl ?? initialData?.pnl ?? '');
@@ -212,6 +235,111 @@ export function TradeForm({ tags, initialData }: TradeFormProps) {
     [entryPrice, stopPrice, exitPrice, direction],
   );
 
+  const riskPreview = useMemo(
+    () => {
+      return calculateTradeRisk(
+        instrument,
+        parseNumber(size),
+        parseNumber(entryPrice),
+        parseNumber(stopPrice),
+        assetClass,
+      );
+    },
+    [instrument, size, entryPrice, stopPrice, assetClass],
+  );
+
+  const calcResults = useMemo(() => {
+    const balance = parseNumber(calcBalance) ?? 10000;
+    const riskVal = parseNumber(calcRiskValue) ?? 0;
+    const entry = parseNumber(entryPrice);
+    const stop = parseNumber(stopPrice);
+    const target = parseNumber(targetPrice);
+
+    if (entry == null || stop == null) return null;
+
+    const targetRiskCash = calcRiskMode === 'percent' ? (balance * riskVal) / 100 : riskVal;
+
+    const symbol = instrument.toUpperCase().replace(/[^A-Z0-9/]/g, '');
+    const matchedKey = Object.keys(PEPPERSTONE_SPECS).find(key => symbol.includes(key));
+    const defaultSpec = matchedKey ? PEPPERSTONE_SPECS[matchedKey] : null;
+
+    const resolvedContractSize = parseNumber(calcContractSize) ?? defaultSpec?.contract_size ?? (assetClass === 'forex' ? 100000 : 1);
+    const quoteCurrency = defaultSpec?.quote_currency ?? 'USD';
+
+    let autoRate = 1.0;
+    if (quoteCurrency === 'JPY') {
+      const jpyRate = symbol.startsWith('USD') ? entry : 155.0;
+      autoRate = 1.0 / jpyRate;
+    } else if (quoteCurrency === 'GBP') {
+      autoRate = 1.30;
+    } else if (quoteCurrency === 'EUR') {
+      autoRate = 1.10;
+    } else if (quoteCurrency === 'AUD') {
+      autoRate = 0.66;
+    } else if (quoteCurrency === 'CHF') {
+      autoRate = 1.0 / 0.90;
+    } else if (quoteCurrency === 'CAD') {
+      autoRate = 1.0 / 1.35;
+    }
+
+    const rate = parseNumber(calcExchangeRate) ?? autoRate;
+
+    const positionSize = calculatePositionSize(
+      instrument,
+      targetRiskCash,
+      entry,
+      stop,
+      assetClass,
+      { contract_size: resolvedContractSize },
+      rate
+    );
+
+    const actualRisk = calculateTradeRisk(
+      instrument,
+      positionSize,
+      entry,
+      stop,
+      assetClass,
+      { contract_size: resolvedContractSize },
+      rate
+    );
+
+    const leverage = parseNumber(calcLeverage) ?? 30;
+    const margin = positionSize ? (resolvedContractSize * positionSize * entry) / leverage : null;
+
+    const riskDist = Math.abs(entry - stop);
+    const rewardDist = target ? Math.abs(target - entry) : 0;
+    const rr = riskDist > 0 ? rewardDist / riskDist : null;
+
+    return {
+      targetRiskCash,
+      positionSize,
+      actualRisk,
+      margin,
+      rr,
+      autoRate,
+      resolvedContractSize,
+      quoteCurrency
+    };
+  }, [
+    calcBalance,
+    calcRiskMode,
+    calcRiskValue,
+    entryPrice,
+    stopPrice,
+    targetPrice,
+    instrument,
+    assetClass,
+    calcExchangeRate,
+    calcContractSize,
+    calcLeverage
+  ]);
+
+  const applyCalculations = () => {
+    if (!calcResults || calcResults.positionSize == null) return;
+    setSize(calcResults.positionSize.toString());
+  };
+
   // Net P&L = gross − commission − swap − fees. Live so the user sees the true
   // realized result as they type the costs in.
   const netPnlPreview = useMemo(
@@ -243,7 +371,8 @@ export function TradeForm({ tags, initialData }: TradeFormProps) {
             <Input
               id="instrument"
               name="instrument"
-              defaultValue={v.instrument ?? initialData?.instrument}
+              value={instrument}
+              onChange={(e) => setInstrument(e.target.value)}
               required
               placeholder="AAPL"
               autoComplete="off"
@@ -253,7 +382,8 @@ export function TradeForm({ tags, initialData }: TradeFormProps) {
             <Select
               id="assetClass"
               name="assetClass"
-              defaultValue={v.assetClass ?? initialData?.assetClass}
+              value={assetClass}
+              onChange={(e) => setAssetClass(e.target.value as AssetClass)}
               required
             >
               {ASSET_CLASS_OPTIONS.map((o) => (
@@ -286,7 +416,188 @@ export function TradeForm({ tags, initialData }: TradeFormProps) {
 
       {/* Sizing & prices — all numeric, all monospace via .num */}
       <section className="space-y-4">
-        <SectionTitle>Levels</SectionTitle>
+        <div className="flex items-center justify-between border-b border-hairline pb-1.5">
+          <h3 className="font-display text-primary text-xs uppercase tracking-wide">
+            Levels
+          </h3>
+          <button
+            type="button"
+            onClick={() => setShowCalculator(!showCalculator)}
+            className="text-accent-signal hover:underline text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1 focus:outline-none cursor-pointer"
+          >
+            <Sliders size={11} />
+            {showCalculator ? 'Hide Sizing Helper' : 'Open Sizing Helper'}
+          </button>
+        </div>
+
+        {showCalculator && (
+          <div className="border border-hairline bg-surface rounded-card p-4 space-y-4">
+            <h4 className="font-display text-primary text-xs uppercase tracking-wide flex items-center gap-1.5 border-b border-hairline/30 pb-2">
+              <Sliders size={13} className="text-accent-signal" />
+              Pepperstone CFD Sizing Calculator
+            </h4>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+              {/* Inputs */}
+              <div className="space-y-3.5">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-secondary block text-[10px] uppercase tracking-wide mb-1 font-display">
+                      Account Balance (USD)
+                    </label>
+                    <input
+                      type="number"
+                      value={calcBalance}
+                      onChange={(e) => setCalcBalance(e.target.value)}
+                      className="num w-full rounded border border-hairline bg-base px-2.5 py-1.5 text-xs text-primary outline-none focus:border-accent-signal"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-secondary block text-[10px] uppercase tracking-wide mb-1 font-display">
+                      Leverage Override
+                    </label>
+                    <input
+                      type="number"
+                      value={calcLeverage}
+                      onChange={(e) => setCalcLeverage(e.target.value)}
+                      className="num w-full rounded border border-hairline bg-base px-2.5 py-1.5 text-xs text-primary outline-none focus:border-accent-signal"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-secondary block text-[10px] uppercase tracking-wide mb-1 font-display">
+                      Risk Target Mode
+                    </label>
+                    <div className="grid grid-cols-2 gap-1 bg-base p-0.5 rounded border border-hairline">
+                      <button
+                        type="button"
+                        onClick={() => setCalcRiskMode('percent')}
+                        className={cn(
+                          "py-1 text-[9px] font-semibold uppercase rounded transition-colors cursor-pointer",
+                          calcRiskMode === 'percent' ? "bg-surface border border-hairline text-accent-signal" : "text-secondary hover:text-primary"
+                        )}
+                      >
+                        Percent (%)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCalcRiskMode('cash')}
+                        className={cn(
+                          "py-1 text-[9px] font-semibold uppercase rounded transition-colors cursor-pointer",
+                          calcRiskMode === 'cash' ? "bg-surface border border-hairline text-accent-signal" : "text-secondary hover:text-primary"
+                        )}
+                      >
+                        Cash ($)
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-secondary block text-[10px] uppercase tracking-wide mb-1 font-display">
+                      Risk Amount ({calcRiskMode === 'percent' ? '%' : '$'})
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={calcRiskValue}
+                      onChange={(e) => setCalcRiskValue(e.target.value)}
+                      className="num w-full rounded border border-hairline bg-base px-2.5 py-1.5 text-xs text-primary outline-none focus:border-accent-signal"
+                    />
+                  </div>
+                </div>
+
+                {/* Advanced specifications overrides */}
+                <div className="border-t border-hairline/30 pt-3 space-y-3">
+                  <span className="text-tertiary text-[10px] uppercase tracking-wider font-semibold block">
+                    Advanced Contract Specification Overrides
+                  </span>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-secondary block text-[10px] uppercase tracking-wide mb-1 font-display">
+                        Exchange Rate Override
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder={calcResults ? `Auto: ${calcResults.autoRate.toFixed(4)}` : '1.0'}
+                        value={calcExchangeRate}
+                        onChange={(e) => setCalcExchangeRate(e.target.value)}
+                        className="num w-full rounded border border-hairline bg-base px-2.5 py-1.5 text-xs text-primary outline-none focus:border-accent-signal"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-secondary block text-[10px] uppercase tracking-wide mb-1 font-display">
+                        Contract Size Override
+                      </label>
+                      <input
+                        type="number"
+                        placeholder={calcResults ? `Default: ${calcResults.resolvedContractSize.toLocaleString()}` : '1'}
+                        value={calcContractSize}
+                        onChange={(e) => setCalcContractSize(e.target.value)}
+                        className="num w-full rounded border border-hairline bg-base px-2.5 py-1.5 text-xs text-primary outline-none focus:border-accent-signal"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Outputs */}
+              <div className="flex flex-col justify-between border-l border-hairline/30 pl-6 space-y-4">
+                <div className="space-y-3">
+                  <span className="text-tertiary text-[10px] uppercase tracking-wide font-semibold block">
+                    Calculated Trade Metrics
+                  </span>
+                  
+                  {calcResults ? (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <span className="text-secondary block text-[10px]">Target Position Size</span>
+                        <span className="num text-accent-signal text-lg font-bold">
+                          {calcResults.positionSize != null ? `${calcResults.positionSize.toFixed(2)} Lots` : '—'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-secondary block text-[10px]">Actual Cash Risked</span>
+                        <span className="num text-primary text-base font-semibold block mt-0.5">
+                          {calcResults.actualRisk != null ? `$${calcResults.actualRisk.toFixed(2)}` : '—'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-secondary block text-[10px]">Required Margin</span>
+                        <span className="num text-primary text-sm block mt-0.5">
+                          {calcResults.margin != null ? `$${calcResults.margin.toFixed(2)}` : '—'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-secondary block text-[10px]">Expected R:R Ratio</span>
+                        <span className="num text-primary text-sm block mt-0.5">
+                          {calcResults.rr != null ? `${calcResults.rr.toFixed(2)}R` : '—'}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-tertiary text-xs italic">
+                      Please enter Entry Price and Stop Loss below to see calculation outputs.
+                    </p>
+                  )}
+                </div>
+
+                {calcResults && calcResults.positionSize != null && (
+                  <button
+                    type="button"
+                    onClick={applyCalculations}
+                    className="w-full bg-accent-signal hover:bg-accent-signal/90 text-base font-semibold text-xs py-2 rounded transition-colors cursor-pointer mt-4"
+                  >
+                    Apply Sizing to Form
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Field id="size" label="Size" error={state.errors?.size}>
             <Input
@@ -296,7 +607,8 @@ export function TradeForm({ tags, initialData }: TradeFormProps) {
               inputMode="decimal"
               step="any"
               min="0"
-              defaultValue={v.size ?? initialData?.size}
+              value={size}
+              onChange={(e) => setSize(e.target.value)}
               required
               placeholder="100"
             />
@@ -368,6 +680,19 @@ export function TradeForm({ tags, initialData }: TradeFormProps) {
             </div>
             <p className="text-tertiary text-[10px]">
               Computed from entry, stop, exit.
+            </p>
+          </div>
+
+          {/* Calculated Risk readout — computed, not typed. */}
+          <div className="space-y-1.5">
+            <Label>Calculated Risk</Label>
+            <div
+              className="num flex h-[38px] items-center rounded-card border border-hairline bg-surface-raised px-3 text-sm text-accent-signal"
+            >
+              {formatRisk(riskPreview)}
+            </div>
+            <p className="text-tertiary text-[10px]">
+              Pepperstone CFD model contract size risk.
             </p>
           </div>
         </div>
