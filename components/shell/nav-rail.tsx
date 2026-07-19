@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   Settings,
   Trophy,
+  Target,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -58,6 +59,12 @@ const NAV_ITEMS: NavItem[] = [
     href: '/dashboard/best-trades',
     icon: Trophy,
     match: (p) => p.startsWith('/dashboard/best-trades'),
+  },
+  {
+    label: 'Ranks',
+    href: '/dashboard/gamification',
+    icon: Target,
+    match: (p) => p.startsWith('/dashboard/gamification'),
   },
   {
     label: 'Settings',
