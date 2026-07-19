@@ -3,7 +3,8 @@ import { createServerClient } from '@/lib/supabase';
 import {
   handleGetTrades,
   handleGetTradeStats,
-  handleSearchJournal
+  handleSearchJournal,
+  handleGetRankProgression
 } from '@/lib/copilot-db';
 
 const INVOKE_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
@@ -36,11 +37,19 @@ export async function POST(req: Request) {
     // Build OpenAI-compatible chat completion payload
     const systemMessage = {
       role: 'system',
-      content: `You are Antigravity Copilot, a premium AI assistant integrated into the user's trading dashboard. You have direct access to their trading log data, statistics, and journal entries.
-Format your responses using clean Markdown. When referencing performance values:
+      content: `You are Antigravity Copilot, named "SJ". You must always identify yourself as "SJ" and know you are called "SJ".
+You are a premium AI assistant integrated into the user's trading dashboard. You have direct access to their trading log data, statistics, and journal entries.
+
+IMPORTANT: Before answering the user's question, you MUST write down your step-by-step thinking process, database search strategy, and calculation reasoning. Format this thinking process inside a clean HTML-style tag block like:
+<thought>
+Here you write your step-by-step thoughts, assumptions, and plan.
+</thought>
+After the closed </thought> tag, output your clean final markdown response to the user.
+
+When referencing performance values in the final response:
 - Use positive format like "+$1,234.50" or "+1.50R" and negative format like "-$543.21" or "-0.80R".
 - Align statistics in structured tables or lists when comparing metrics.
-- Keep responses concise, professional, and clear.`
+- Keep final responses concise, professional, and clear.`
     };
 
     // Keep system message at the beginning of the messages list.
@@ -141,6 +150,17 @@ Format your responses using clean Markdown. When referencing performance values:
             required: ['query']
           }
         }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'get_rank_progression',
+          description: "Returns the user's current rank progression milestone information, account balance, total net P&L, next milestone target, completion percentage, and risk allowance size.",
+          parameters: {
+            type: 'object',
+            properties: {}
+          }
+        }
       }
     ];
 
@@ -206,6 +226,8 @@ Format your responses using clean Markdown. When referencing performance values:
               result = await handleGetTrades(userId, args);
             } else if (name === 'search_journal') {
               result = await handleSearchJournal(userId, args);
+            } else if (name === 'get_rank_progression') {
+              result = await handleGetRankProgression(userId);
             } else {
               result = { error: `Tool ${name} not found` };
             }

@@ -1,15 +1,16 @@
 'use client';
 
-import { useRef, useEffect, useMemo } from 'react';
-import { Plus, MessageSquare, Trash2, Menu, X } from 'lucide-react';
+import { useRef, useEffect, useState } from 'react';
+import { Plus, MessageSquare, Trash2, Menu, X, Edit3, ChevronLeft, ChevronRight, XCircle, Brain } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useCopilot } from '@/components/copilot/copilot-provider';
+import { useCopilot, type Message } from '@/components/copilot/copilot-provider';
 
 export default function CopilotPage() {
   const {
     sessions,
     activeSessionId,
     messages,
+    setMessages,
     input,
     setInput,
     loading,
@@ -20,9 +21,15 @@ export default function CopilotPage() {
     handleNewChat,
     handleDeleteSession,
     handleSend,
+    handleEditPrompt,
+    handleCancelRequest,
   } = useCopilot();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Tracks which user message is currently being edited
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editingValue, setEditingValue] = useState('');
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -30,12 +37,11 @@ export default function CopilotPage() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, loading]);
 
   const handleChipClick = (prompt: string) => {
     handleSend(prompt);
   };
-
 
   const parseInlineFormatting = (text: string) => {
     const regex = /(\*\*.*?\*\*|`.*?`|\+[\d\.,]+%|\-[\d\.,]+%|\+[\d\.,]+R|\-[\d\.,]+R|\+[\d\.,\$\s]+|\-[\d\.,\$\s]+)/g;
@@ -72,7 +78,10 @@ export default function CopilotPage() {
   };
 
   const formatMessageContent = (content: string) => {
-    const lines = content.split('\n');
+    // Strip thought tags from the final rendering of the text content
+    const cleanContent = content.replace(/<thought>[\s\S]*?<\/thought>/g, '').trim();
+
+    const lines = cleanContent.split('\n');
     return lines.map((line, idx) => {
       if (line.startsWith('### ')) {
         return (
@@ -123,11 +132,17 @@ export default function CopilotPage() {
     });
   };
 
+  // Extract thoughts to render them in a premium disclosure panel
+  const getThoughtProcess = (content: string): string | null => {
+    const match = content.match(/<thought>([\s\S]*?)<\/thought>/);
+    return match ? match[1].trim() : null;
+  };
+
   const quickPrompts = [
     'What is my overall win rate?',
     'Show my crypto trade statistics',
     "Search my journals for FOMO or revenge",
-    'Show my 5 most recent closed trades'
+    'Show my current Rank progression'
   ];
 
   const formatSessionDate = (dateVal: Date | string) => {
@@ -139,7 +154,28 @@ export default function CopilotPage() {
     });
   };
 
-  // Sidebar history component content
+  // Version switcher actions for prompt edits
+  const handleVersionChange = (msgIndex: number, direction: 'prev' | 'next') => {
+    const msg = messages[msgIndex];
+    if (!msg || !msg.versions || msg.activeVersionIdx === undefined) return;
+
+    let nextIdx = msg.activeVersionIdx + (direction === 'next' ? 1 : -1);
+    if (nextIdx >= 0 && nextIdx < msg.versions.length) {
+      const selectedVersionText = msg.versions[nextIdx];
+      
+      // Update local state with the version idx and content
+      const updatedMessages = [...messages];
+      updatedMessages[msgIndex] = {
+        ...msg,
+        content: selectedVersionText,
+        activeVersionIdx: nextIdx
+      };
+
+      setMessages(updatedMessages);
+      handleEditPrompt(msgIndex, selectedVersionText);
+    }
+  };
+
   const sidebarContent = (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between mb-4">
@@ -234,7 +270,7 @@ export default function CopilotPage() {
             </button>
             <div>
               <h1 className="font-display text-primary text-sm font-bold uppercase tracking-wide">
-                AI Copilot
+                SJ Copilot
               </h1>
               <p className="text-secondary text-[10px] hidden sm:block mt-0.5">
                 Your interactive trading analysis terminal. Query performance, analyze setups, and inspect daily logs.
@@ -262,20 +298,107 @@ export default function CopilotPage() {
           ) : (
             messages.map((m, idx) => {
               const isAssistant = m.role === 'assistant';
+              const thought = isAssistant ? getThoughtProcess(m.content) : null;
+              const hasVersions = !isAssistant && m.versions && m.versions.length > 1;
+
               return (
-                <div key={idx} className={`flex ${isAssistant ? 'justify-start' : 'justify-end'}`}>
+                <div key={idx} className={`flex ${isAssistant ? 'justify-start' : 'justify-end'} group/row`}>
                   <div
                     className={cn(
-                      'max-w-[85%] rounded-card border p-3.5',
+                      'max-w-[85%] rounded-card border p-3.5 relative flex flex-col gap-1',
                       isAssistant
                         ? 'bg-surface border-hairline text-primary'
                         : 'bg-surface-raised border-accent-signal/30 text-primary'
                     )}
                   >
-                    <span className="text-[9px] uppercase tracking-wider text-tertiary font-display block mb-1.5">
-                      {isAssistant ? 'Copilot' : 'You'}
-                    </span>
-                    <div className="space-y-1">{formatMessageContent(m.content)}</div>
+                    <div className="flex items-center justify-between gap-4 mb-0.5">
+                      <span className="text-[9px] uppercase tracking-wider text-tertiary font-display">
+                        {isAssistant ? 'SJ' : 'You'}
+                      </span>
+
+                      {/* Version track indicators (e.g. 1/2) for user prompt edits */}
+                      {hasVersions && m.versions && m.activeVersionIdx !== undefined && (
+                        <div className="flex items-center gap-1 text-[9px] text-tertiary font-mono select-none">
+                          <button
+                            onClick={() => handleVersionChange(idx, 'prev')}
+                            disabled={m.activeVersionIdx === 0 || loading}
+                            className="hover:text-primary transition-colors disabled:opacity-30 cursor-pointer"
+                          >
+                            <ChevronLeft size={10} />
+                          </button>
+                          <span>
+                            {m.activeVersionIdx + 1}/{m.versions.length}
+                          </span>
+                          <button
+                            onClick={() => handleVersionChange(idx, 'next')}
+                            disabled={m.activeVersionIdx === m.versions.length - 1 || loading}
+                            className="hover:text-primary transition-colors disabled:opacity-30 cursor-pointer"
+                          >
+                            <ChevronRight size={10} />
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Edit Button for user prompts */}
+                      {!isAssistant && editingIndex !== idx && !loading && (
+                        <button
+                          onClick={() => {
+                            setEditingIndex(idx);
+                            setEditingValue(m.content);
+                          }}
+                          className="opacity-0 group-hover/row:opacity-100 transition-opacity hover:text-accent-signal text-tertiary p-0.5 cursor-pointer absolute right-2 top-2"
+                          title="Edit message"
+                        >
+                          <Edit3 size={11} />
+                        </button>
+                      )}
+                    </div>
+
+                    {editingIndex === idx ? (
+                      <div className="flex flex-col gap-2 mt-1">
+                        <textarea
+                          value={editingValue}
+                          onChange={(e) => setEditingValue(e.target.value)}
+                          className="w-full bg-surface border border-hairline rounded-card text-xs text-primary p-2 focus:outline-none focus:border-accent-signal min-h-[50px] font-sans"
+                        />
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => setEditingIndex(null)}
+                            className="text-[10px] font-display border border-hairline rounded px-2.5 py-1 text-secondary hover:text-primary cursor-pointer"
+                          >
+                            CANCEL
+                          </button>
+                          <button
+                            onClick={async () => {
+                              setEditingIndex(null);
+                              await handleEditPrompt(idx, editingValue);
+                            }}
+                            className="text-[10px] font-display bg-accent-signal text-[#0B0D10] font-semibold rounded px-2.5 py-1 cursor-pointer"
+                          >
+                            SAVE & SUBMIT
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {/* If assistant has thoughts, render thought process details block */}
+                        {thought && (
+                          <div className="mb-2 border-l border-hairline/80 pl-2 py-0.5 bg-[#14171C]/50 rounded-[2px] overflow-hidden">
+                            <details className="group/details">
+                              <summary className="list-none flex items-center gap-1 text-[10px] text-tertiary cursor-pointer font-display select-none uppercase tracking-wider hover:text-secondary">
+                                <Brain size={10} className="text-accent-signal shrink-0" />
+                                <span>View Thought Process</span>
+                              </summary>
+                              <div className="text-[10px] text-secondary font-mono leading-relaxed mt-1.5 whitespace-pre-wrap font-light border-t border-hairline/20 pt-1">
+                                {thought}
+                              </div>
+                            </details>
+                          </div>
+                        )}
+
+                        <div className="space-y-1">{formatMessageContent(m.content)}</div>
+                      </>
+                    )}
                   </div>
                 </div>
               );
@@ -284,10 +407,18 @@ export default function CopilotPage() {
           
           {loading && (
             <div className="flex justify-start">
-              <div className="max-w-[85%] bg-surface border-hairline rounded-card border p-3.5 space-y-2">
-                <span className="text-[9px] uppercase tracking-wider text-tertiary font-display block">
-                  Copilot is analyzing...
-                </span>
+              <div className="max-w-[85%] bg-surface border-hairline rounded-card border p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-[9px] uppercase tracking-wider text-tertiary font-display block">
+                    SJ is analyzing...
+                  </span>
+                  <button
+                    onClick={handleCancelRequest}
+                    className="flex items-center gap-1 text-[10px] text-loss font-display font-semibold hover:text-loss/85 cursor-pointer uppercase tracking-wider bg-loss/5 border border-loss/20 px-2 py-0.5 rounded-[2px]"
+                  >
+                    <XCircle size={10} /> Cancel
+                  </button>
+                </div>
                 <div className="flex items-center gap-1.5 text-xs text-secondary mt-1">
                   <div className="animate-spin h-3.5 w-3.5 border border-accent-signal border-t-transparent rounded-card" />
                   <span>Scanning databases & computing statistics</span>
@@ -327,17 +458,27 @@ export default function CopilotPage() {
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask Copilot about your trade statistics or logs..."
+              placeholder="Ask SJ about your trade statistics or logs..."
               disabled={loading || loadingMessages}
               className="flex-1 bg-surface-raised border border-hairline focus:border-accent-signal/80 rounded px-3 py-2 text-xs text-primary outline-none transition-colors disabled:opacity-60"
             />
-            <button
-              type="submit"
-              disabled={!input.trim() || loading || loadingMessages}
-              className="bg-accent-signal hover:bg-accent-signal/90 disabled:bg-surface-raised disabled:text-tertiary disabled:border-hairline text-base font-display font-semibold text-xs px-5 rounded-card border border-transparent transition-colors duration-150 cursor-pointer"
-            >
-              SEND
-            </button>
+            {loading ? (
+              <button
+                type="button"
+                onClick={handleCancelRequest}
+                className="bg-loss hover:bg-loss/90 text-[#0B0D10] font-display font-semibold text-xs px-5 rounded-card border border-transparent transition-colors duration-150 cursor-pointer flex items-center gap-1"
+              >
+                <XCircle size={12} /> CANCEL
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={!input.trim() || loading || loadingMessages}
+                className="bg-accent-signal hover:bg-accent-signal/90 disabled:bg-surface-raised disabled:text-tertiary disabled:border-hairline text-base font-display font-semibold text-xs px-5 rounded-card border border-transparent transition-colors duration-150 cursor-pointer"
+              >
+                SEND
+              </button>
+            )}
           </form>
         </div>
       </div>

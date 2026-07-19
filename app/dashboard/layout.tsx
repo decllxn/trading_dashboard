@@ -45,6 +45,7 @@ export default async function DashboardLayout({
     redirect('/login');
   }
 
+  // Fetch broker connection
   const { data: connection } = await supabase
     .from('broker_connections')
     .select('broker_name, provider')
@@ -57,22 +58,67 @@ export default async function DashboardLayout({
     ? (connection.broker_name || connection.provider)
     : null;
 
+  // Calculate starting balance and current net equity for rank progression
+  const { db } = await import('@/db');
+  const { trades, userSettings } = await import('@/db/schema');
+  const { eq } = await import('drizzle-orm');
+  const { computeNetPnl, STARTING_BALANCE_DEFAULT } = await import('@/lib/stats');
+
+  let startingBalance = STARTING_BALANCE_DEFAULT;
+  let currentBalance = STARTING_BALANCE_DEFAULT;
+
+  if (db) {
+    const settingsRow = await db
+      .select({ startingBalance: userSettings.startingBalance })
+      .from(userSettings)
+      .where(eq(userSettings.userId, user.id))
+      .limit(1)
+      .then((rows) => rows[0]);
+
+    startingBalance = settingsRow?.startingBalance
+      ? Number(settingsRow.startingBalance)
+      : STARTING_BALANCE_DEFAULT;
+
+    const tradesRows = await db
+      .select({
+        pnl: trades.pnl,
+        commission: trades.commission,
+        swap: trades.swap,
+        fees: trades.fees,
+        status: trades.status,
+      })
+      .from(trades)
+      .where(eq(trades.userId, user.id));
+
+    let totalClosedNetPnl = 0;
+    for (const t of tradesRows) {
+      if (t.status === 'closed') {
+        const gross = t.pnl ? Number(t.pnl) : 0;
+        const commission = t.commission ? Number(t.commission) : 0;
+        const swap = t.swap ? Number(t.swap) : 0;
+        const fees = t.fees ? Number(t.fees) : 0;
+        const netPnl = computeNetPnl(gross, commission, swap, fees);
+        if (netPnl !== null) {
+          totalClosedNetPnl += netPnl;
+        }
+      }
+    }
+
+    currentBalance = startingBalance + totalClosedNetPnl;
+  }
+
   // Persistent app shell: rail + (top bar + content).
-  // The frame persists across all /dashboard/* navigation; only {children}
-  // re-renders on route change.
-  //
-  // The shell is height-locked (h-screen overflow-hidden) so the NavRail and
-  // TopBar never scroll — only the <main> scroll container does. min-w-0 on
-  // the columns keeps flex children from pushing the rail when wide tables or
-  // charts overflow. z-40/z-30 establish the persistent layers so floating UI
-  // (tooltips, the account menu) always paint above scrolling content.
   return (
     <CopilotProvider>
       <div className="bg-base flex h-screen overflow-hidden">
         <NavRail />
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="z-30 shrink-0">
-            <TopBar email={user.email ?? ''} activeBrokerName={activeBrokerName} />
+            <TopBar 
+              email={user.email ?? ''} 
+              activeBrokerName={activeBrokerName} 
+              currentBalance={currentBalance}
+            />
           </div>
           <main className="no-scrollbar min-w-0 flex-1 overflow-y-auto">{children}</main>
         </div>
