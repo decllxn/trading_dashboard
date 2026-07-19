@@ -1,41 +1,66 @@
-# dependencies
-/node_modules
-/.pnp
+# Next.js Build Outputs
+.next/
+out/
+build/
+dist/
+
+# Dependencies
+node_modules/
+.pnp
 .pnp.js
 .yarn/install-state.gz
 
-# testing
-/coverage
-
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
-.DS_Store
+# Local Environment Variables & Secrets (Production Guard)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 *.pem
+*.key
+certs/
 
-# debug
+# Logs & Debugging Output
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
 .pnpm-debug.log*
 
-# local env files
-.env
-.env*.local
-.env.local.example
+# OS Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
-# vercel
+# IDE & Editor Configurations
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Testing Coverage
+coverage/
+.nyc_output/
+
+# Vercel Deployment Configurations
 .vercel
 
-# Drizzle — generated migration snapshots/meta used only for local diffing.
-# Canonical migrations live in supabase/migrations/*.sql (committed).
+# Drizzle & DB Migrations
+# We ignore generated migration meta used only for local dev diffing.
+# Migration scripts live in supabase/migrations/*.sql.
 /drizzle
 
-# typescript
+# TypeScript compilation info
 *.tsbuildinfo
 next-env.d.ts
+
+# Linter caches
+.eslintcache
