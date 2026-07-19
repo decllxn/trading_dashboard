@@ -116,22 +116,22 @@ export async function getMarketData(
   timeframe: string = '1D',
   start?: string
 ): Promise<Bar[]> {
-  const fetchFn = async () => {
+  const fetchFn = async (queryStart?: string) => {
     const isForex = symbol.includes('/') || symbol.includes('-') || symbol.length > 5;
     if (isForex) {
-      return fetchTwelveDataBars(symbol, timeframe, start);
+      return fetchTwelveDataBars(symbol, timeframe, queryStart);
     } else {
       try {
-        return await fetchAlpacaBars(symbol, timeframe, start);
+        return await fetchAlpacaBars(symbol, timeframe, queryStart);
       } catch (alpacaError) {
         console.warn(`Alpaca failed for ${symbol}, falling back to Twelve Data:`, alpacaError);
-        return fetchTwelveDataBars(symbol, timeframe, start);
+        return fetchTwelveDataBars(symbol, timeframe, queryStart);
       }
     }
   };
 
   if (!db) {
-    return fetchFn();
+    return fetchFn(start);
   }
 
   try {
@@ -154,12 +154,60 @@ export async function getMarketData(
       const ageMs = now.getTime() - cachedDate.getTime();
       const isRecent = ageMs < 24 * 60 * 60 * 1000;
 
-      if (isSameDay || isRecent) {
-        return cached.data;
+      const earliestCachedDate = cached.data.length > 0 ? cached.data[0].time : null;
+      let hasNeededHistory = false;
+      if (!start) {
+        hasNeededHistory = true;
+      } else if (earliestCachedDate !== null) {
+        if (earliestCachedDate <= start) {
+          hasNeededHistory = true;
+        } else {
+          // If the cached date is within 4 days after the requested start, it's highly likely
+          // that the start date fell on a weekend or holiday, and the cached date is the first trading day.
+          const startMs = Date.parse(start);
+          const cachedMs = Date.parse(earliestCachedDate);
+          if (!Number.isNaN(startMs) && !Number.isNaN(cachedMs)) {
+            const diffDays = (cachedMs - startMs) / (1000 * 60 * 60 * 24);
+            if (diffDays <= 4) {
+              hasNeededHistory = true;
+            }
+          }
+        }
       }
+
+      if ((isSameDay || isRecent) && hasNeededHistory) {
+        return start
+          ? cached.data.filter((pt) => pt.time >= start)
+          : cached.data;
+      }
+
+      // If the cache is stale or missing older history, fetch fresh data.
+      // Use the minimum of requested 'start' and 'earliestCachedDate' to avoid losing cached history.
+      const fetchStart = start && earliestCachedDate && earliestCachedDate < start ? earliestCachedDate : start;
+      const freshData = await fetchFn(fetchStart);
+
+      await db
+        .insert(marketDataCache)
+        .values({
+          symbol,
+          timeframe,
+          data: freshData,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: [marketDataCache.symbol, marketDataCache.timeframe],
+          set: {
+            data: freshData,
+            updatedAt: now,
+          },
+        });
+
+      return start
+        ? freshData.filter((pt) => pt.time >= start)
+        : freshData;
     }
 
-    const freshData = await fetchFn();
+    const freshData = await fetchFn(start);
 
     await db
       .insert(marketDataCache)
@@ -180,6 +228,6 @@ export async function getMarketData(
     return freshData;
   } catch (error) {
     console.error(`Error in getMarketData for ${symbol}:`, error);
-    return fetchFn();
+    return fetchFn(start);
   }
 }
