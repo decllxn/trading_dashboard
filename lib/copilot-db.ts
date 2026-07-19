@@ -1,5 +1,5 @@
 import { db } from '../db/index.ts';
-import { trades, tradeTags, tags, journalEntries } from '../db/schema.ts';
+import { trades, tradeTags, tags, journalEntries, userSettings } from '../db/schema.ts';
 import { eq, and, or, ilike, gte, lte, desc, SQL } from 'drizzle-orm';
 import {
   winRate,
@@ -10,7 +10,9 @@ import {
   sharpeRatio,
   sortinoRatio,
   edgeScore,
-  type StatTrade
+  type StatTrade,
+  computeNetPnl,
+  STARTING_BALANCE_DEFAULT
 } from './stats.ts';
 
 // Helper to query and filter trades
@@ -187,4 +189,106 @@ export async function handleSearchJournal(userId: string, args: any) {
   .limit(10);
 
   return entries;
+}
+
+const LEVELS = [
+  { level: 0, rank: "Novice Cadet", target: 150, risk: 15 },
+  { level: 1, rank: "Market Apprentice", target: 300, risk: 30 },
+  { level: 2, rank: "Risk Practitioner", target: 600, risk: 60 },
+  { level: 3, rank: "Discipline Enforcer", target: 1200, risk: 120 },
+  { level: 4, rank: "Trend Navigator", target: 2400, risk: 240 },
+  { level: 5, rank: "Capital Guardian", target: 4800, risk: 480 },
+  { level: 6, rank: "Edge Specialist", target: 9600, risk: 960 },
+  { level: 7, rank: "Sovereign Trader", target: 19200, risk: 1920 },
+  { level: 8, rank: "Tactical Veteran", target: 38400, risk: 3840 },
+  { level: 9, rank: "Market Operator", target: 76800, risk: 7680 },
+  { level: 10, rank: "Portfolio Architect", target: 153600, risk: 15360 },
+  { level: 11, rank: "Apex Strategist", target: 307200, risk: 30720 },
+  { level: 12, rank: "Macro Voyager", target: 614400, risk: 61440 },
+  { level: 13, rank: "Market Legend", target: 1000000, risk: 100000 }
+];
+
+export async function handleGetRankProgression(userId: string) {
+  if (!db) {
+    return {
+      startingBalance: STARTING_BALANCE_DEFAULT,
+      currentBalance: STARTING_BALANCE_DEFAULT,
+      totalClosedNetPnl: 0,
+      currentRank: LEVELS[0].rank,
+      activeLevelIndex: 0,
+      nextRank: LEVELS[1].rank,
+      nextRankTarget: LEVELS[1].target,
+      progressPercentage: 0,
+      riskAllowancePerTrade: LEVELS[0].risk
+    };
+  }
+
+  const settingsRow = await db
+    .select({ startingBalance: userSettings.startingBalance })
+    .from(userSettings)
+    .where(eq(userSettings.userId, userId))
+    .limit(1)
+    .then((rows) => rows[0]);
+
+  const startingBalance = settingsRow?.startingBalance
+    ? Number(settingsRow.startingBalance)
+    : STARTING_BALANCE_DEFAULT;
+
+  const tradesRows = await db
+    .select({
+      pnl: trades.pnl,
+      commission: trades.commission,
+      swap: trades.swap,
+      fees: trades.fees,
+      status: trades.status,
+    })
+    .from(trades)
+    .where(eq(trades.userId, userId));
+
+  let totalClosedNetPnl = 0;
+  for (const t of tradesRows) {
+    if (t.status === 'closed') {
+      const gross = t.pnl ? Number(t.pnl) : 0;
+      const commission = t.commission ? Number(t.commission) : 0;
+      const swap = t.swap ? Number(t.swap) : 0;
+      const fees = t.fees ? Number(t.fees) : 0;
+      const netPnl = computeNetPnl(gross, commission, swap, fees);
+      if (netPnl !== null) {
+        totalClosedNetPnl += netPnl;
+      }
+    }
+  }
+
+  const currentBalance = startingBalance + totalClosedNetPnl;
+
+  let activeLevelIdx = 0;
+  for (let i = 0; i < LEVELS.length; i++) {
+    if (currentBalance >= LEVELS[i].target) {
+      activeLevelIdx = i;
+    } else {
+      break;
+    }
+  }
+
+  const currentLevel = LEVELS[activeLevelIdx];
+  const nextLevel = activeLevelIdx < LEVELS.length - 1 ? LEVELS[activeLevelIdx + 1] : null;
+
+  let progressPercentage = 100;
+  if (nextLevel) {
+    const range = nextLevel.target - currentLevel.target;
+    const progress = currentBalance - currentLevel.target;
+    progressPercentage = Math.min(Math.max((progress / range) * 100, 0), 100);
+  }
+
+  return {
+    startingBalance,
+    currentBalance,
+    totalClosedNetPnl,
+    currentRank: currentLevel.rank,
+    activeLevelIndex: activeLevelIdx,
+    nextRank: nextLevel ? nextLevel.rank : null,
+    nextRankTarget: nextLevel ? nextLevel.target : null,
+    progressPercentage,
+    riskAllowancePerTrade: currentLevel.risk
+  };
 }

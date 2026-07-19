@@ -179,6 +179,16 @@ export async function createTrade(
   const { errors, values, data } = validateTrade(formData);
   if (Object.keys(errors).length > 0) return { errors, values };
 
+  const { data: activeConnection } = await supabase
+    .from('broker_connections')
+    .select('id')
+    .eq('status', 'active')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const brokerConnectionId = activeConnection ? activeConnection.id : null;
+
   const rMultiple = computeRMultiple(data.entryPrice!, data.stopPrice, data.exitPrice, data.direction);
 
   const { data: tradeRow, error: tradeError } = await supabase
@@ -206,6 +216,7 @@ export async function createTrade(
       one_hour_pd_array: data.oneHourPdArray || null,
       thirty_minute_pd_array: data.thirtyMinutePdArray || null,
       images: data.images,
+      broker_connection_id: brokerConnectionId,
     })
     .select('id')
     .single();
@@ -366,4 +377,55 @@ export async function toggleSessionBands(enabled: boolean): Promise<{ error?: st
   if (error) return { error: error.message };
   revalidatePath('/dashboard');
   return {};
+}
+
+export async function createLiveTrade(data: {
+  instrument: string;
+  direction: 'long' | 'short';
+  entryPrice: number;
+  stopPrice: number | null;
+  targetPrice: number | null;
+  size: number;
+}): Promise<{ error?: string; success?: boolean }> {
+  if (!isSupabaseConfigured()) return { error: 'Supabase is not configured.' };
+  const supabase = createServerClient();
+  if (!supabase) return { error: 'Database client unavailable.' };
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Not authenticated.' };
+
+  if (!data.instrument.trim()) return { error: 'Instrument is required.' };
+  if (data.entryPrice <= 0) return { error: 'Entry price must be greater than 0.' };
+  if (data.size <= 0) return { error: 'Size must be greater than 0.' };
+
+  const rMultiple = computeRMultiple(data.entryPrice, data.stopPrice, data.targetPrice, data.direction);
+
+  const cleanInst = data.instrument.toUpperCase();
+  const isForex = cleanInst.includes('/') || ['USDCAD', 'EURUSD', 'GBPUSD', 'AUDUSD', 'USDJPY', 'XAUUSD'].includes(cleanInst);
+  const assetClass: AssetClass = isForex ? 'forex' : 'equity';
+
+  const { error } = await supabase
+    .from('trades')
+    .insert({
+      user_id: user.id,
+      instrument: data.instrument.trim(),
+      asset_class: assetClass,
+      direction: data.direction,
+      status: 'open',
+      source: 'manual',
+      entry_price: String(data.entryPrice),
+      stop_price: data.stopPrice ? String(data.stopPrice) : null,
+      target_price: data.targetPrice ? String(data.targetPrice) : null,
+      size: String(data.size),
+      entry_time: new Date().toISOString(),
+      r_multiple: rMultiple != null ? String(rMultiple) : null,
+    });
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath('/dashboard');
+  revalidatePath('/dashboard/trades');
+  return { success: true };
 }

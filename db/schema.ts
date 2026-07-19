@@ -25,6 +25,7 @@
 import {
   boolean,
   date,
+  integer,
   jsonb,
   numeric,
   pgEnum,
@@ -432,4 +433,85 @@ export const marketDataCache = pgTable(
 
 export type MarketDataCache = typeof marketDataCache.$inferSelect;
 export type NewMarketDataCache = typeof marketDataCache.$inferInsert;
+
+/**
+ * copilot_sessions — chat session threads for the AI Copilot.
+ */
+export const copilotSessions = pgTable('copilot_sessions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull(),
+  title: text('title').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type CopilotSession = typeof copilotSessions.$inferSelect;
+export type NewCopilotSession = typeof copilotSessions.$inferInsert;
+
+/**
+ * copilot_messages — individual messages inside a Copilot session.
+ */
+export const copilotMessages = pgTable('copilot_messages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sessionId: uuid('session_id')
+    .notNull()
+    .references(() => copilotSessions.id, { onDelete: 'cascade' }),
+  role: text('role').notNull(), // 'user' | 'assistant'
+  content: text('content').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type CopilotMessage = typeof copilotMessages.$inferSelect;
+export type NewCopilotMessage = typeof copilotMessages.$inferInsert;
+
+/**
+ * best_trades — archive of user's best trades of the week.
+ */
+export const bestTrades = pgTable('best_trades', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull(),
+  instrument: text('instrument').notNull(),
+  timeFormed: timestamp('time_formed', { withTimezone: true }).notNull(),
+  dailyPdArray: text('daily_pd_array'),
+  hourlyPdArray: text('hourly_pd_array'),
+  images: jsonb('images').$type<string[]>().default([]),
+  notes: text('notes'),
+  wasTaken: boolean('was_taken').notNull().default(false),
+  linkedTradeId: uuid('linked_trade_id').references(() => trades.id, { onDelete: 'set null' }),
+  rMultiple: numeric('r_multiple', { precision: 10, scale: 4 }),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type BestTrade = typeof bestTrades.$inferSelect;
+export type NewBestTrade = typeof bestTrades.$inferInsert;
+
+/**
+ * simulations — user's saved Monte Carlo position sizing simulations.
+ */
+export const simulations = pgTable('simulations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull(),
+  name: text('name').notNull(),
+  numSimulations: integer('num_simulations').notNull(),
+  numTrades: integer('num_trades').notNull(),
+  riskPerTrade: numeric('risk_per_trade', { precision: 10, scale: 4 }).notNull(),
+  ruinThreshold: numeric('ruin_threshold', { precision: 10, scale: 4 }).notNull(),
+  mcResult: jsonb('mc_result').notNull(),
+  sizingResult: jsonb('sizing_result').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type Simulation = typeof simulations.$inferSelect;
+export type NewSimulation = typeof simulations.$inferInsert;
+
 

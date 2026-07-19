@@ -348,15 +348,166 @@ export function formatEntryDate(iso: string | null): string {
 }
 
 /** Format a decimal-as-number for a price/size cell; null → dash. */
-export function formatPrice(value: number | null): string {
+export function formatPrice(value: number | null, assetClass?: AssetClass | null): string {
   if (value == null) return '—';
+  const decimals = assetClass === 'forex' ? 4 : 2;
   return value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
   });
 }
 
 /** Capitalize the first letter — used for direction/status display. */
 export function capitalize(value: string): string {
   return value.length === 0 ? value : value[0].toUpperCase() + value.slice(1);
+}
+
+export interface InstrumentSpec {
+  symbol: string;
+  name: string;
+  class: 'fx' | 'commodity' | 'index';
+  contract_size: number;
+  pip_or_point_size: number;
+  quote_currency: string;
+  min_lot: number;
+  lot_step: number;
+  max_lot: number;
+}
+
+export const PEPPERSTONE_SPECS: Record<string, InstrumentSpec> = {
+  "EURUSD": { symbol: "EURUSD", name: "EUR/USD", class: "fx", contract_size: 100000, pip_or_point_size: 0.0001, quote_currency: "USD", min_lot: 0.01, lot_step: 0.01, max_lot: 100 },
+  "GBPUSD": { symbol: "GBPUSD", name: "GBP/USD", class: "fx", contract_size: 100000, pip_or_point_size: 0.0001, quote_currency: "USD", min_lot: 0.01, lot_step: 0.01, max_lot: 100 },
+  "USDJPY": { symbol: "USDJPY", name: "USD/JPY", class: "fx", contract_size: 100000, pip_or_point_size: 0.01, quote_currency: "JPY", min_lot: 0.01, lot_step: 0.01, max_lot: 100 },
+  "AUDUSD": { symbol: "AUDUSD", name: "AUD/USD", class: "fx", contract_size: 100000, pip_or_point_size: 0.0001, quote_currency: "USD", min_lot: 0.01, lot_step: 0.01, max_lot: 100 },
+  "EURJPY": { symbol: "EURJPY", name: "EUR/JPY", class: "fx", contract_size: 100000, pip_or_point_size: 0.01, quote_currency: "JPY", min_lot: 0.01, lot_step: 0.01, max_lot: 100 },
+  "GBPJPY": { symbol: "GBPJPY", name: "GBP/JPY", class: "fx", contract_size: 100000, pip_or_point_size: 0.01, quote_currency: "JPY", min_lot: 0.01, lot_step: 0.01, max_lot: 100 },
+  "USDCAD": { symbol: "USDCAD", name: "USD/CAD", class: "fx", contract_size: 100000, pip_or_point_size: 0.0001, quote_currency: "CAD", min_lot: 0.01, lot_step: 0.01, max_lot: 100 },
+  "USDCHF": { symbol: "USDCHF", name: "USD/CHF", class: "fx", contract_size: 100000, pip_or_point_size: 0.0001, quote_currency: "CHF", min_lot: 0.01, lot_step: 0.01, max_lot: 100 },
+  
+  "XAUUSD": { symbol: "XAUUSD", name: "Gold (XAU/USD)", class: "commodity", contract_size: 100, pip_or_point_size: 0.01, quote_currency: "USD", min_lot: 0.01, lot_step: 0.01, max_lot: 100 },
+  "XAGUSD": { symbol: "XAGUSD", name: "Silver (XAG/USD)", class: "commodity", contract_size: 5000, pip_or_point_size: 0.001, quote_currency: "USD", min_lot: 0.01, lot_step: 0.01, max_lot: 100 },
+  "USOIL":  { symbol: "USOIL",  name: "Crude Oil (WTI)", class: "commodity", contract_size: 1000, pip_or_point_size: 0.01, quote_currency: "USD", min_lot: 0.01, lot_step: 0.01, max_lot: 100 },
+  "UKOIL":  { symbol: "UKOIL",  name: "Crude Oil (Brent)", class: "commodity", contract_size: 1000, pip_or_point_size: 0.01, quote_currency: "USD", min_lot: 0.01, lot_step: 0.01, max_lot: 100 },
+  "NGAS":   { symbol: "NGAS",   name: "Natural Gas", class: "commodity", contract_size: 10000, pip_or_point_size: 0.001, quote_currency: "USD", min_lot: 0.01, lot_step: 0.01, max_lot: 100 },
+
+  "US500":  { symbol: "US500",  name: "S&P 500 (US500)", class: "index", contract_size: 1, pip_or_point_size: 1.0, quote_currency: "USD", min_lot: 0.01, lot_step: 0.01, max_lot: 100 },
+  "NAS100": { symbol: "NAS100", name: "Nasdaq (NAS100)", class: "index", contract_size: 1, pip_or_point_size: 1.0, quote_currency: "USD", min_lot: 0.01, lot_step: 0.01, max_lot: 100 },
+  "US30":   { symbol: "US30",   name: "Dow Jones (US30)", class: "index", contract_size: 1, pip_or_point_size: 1.0, quote_currency: "USD", min_lot: 0.01, lot_step: 0.01, max_lot: 100 },
+  "GER40":  { symbol: "GER40",  name: "DAX (GER40)", class: "index", contract_size: 1, pip_or_point_size: 1.0, quote_currency: "EUR", min_lot: 0.01, lot_step: 0.01, max_lot: 100 },
+  "UK100":  { symbol: "UK100",  name: "FTSE (UK100)", class: "index", contract_size: 1, pip_or_point_size: 1.0, quote_currency: "GBP", min_lot: 0.01, lot_step: 0.01, max_lot: 100 }
+};
+
+/**
+ * Calculates the exact currency amount (in USD) risked on a trade,
+ * accounting for Pepperstone's contract sizes/multipliers across CFDs and FX.
+ */
+export function calculateTradeRisk(
+  instrument: string | null,
+  size: number | null,
+  entry: number | null,
+  stop: number | null,
+  assetClass: AssetClass | null,
+  userSpecs?: Partial<InstrumentSpec>,
+  exchangeRateOverride?: number
+): number | null {
+  if (!instrument || size == null || entry == null || stop == null) return null;
+  const priceDiff = Math.abs(entry - stop);
+  if (priceDiff === 0) return null;
+
+  const symbol = instrument.toUpperCase().replace(/[^A-Z0-9/]/g, '');
+  
+  // Find match in our Pepperstone default specs
+  const matchedKey = Object.keys(PEPPERSTONE_SPECS).find(key => symbol.includes(key));
+  const defaultSpec = matchedKey ? PEPPERSTONE_SPECS[matchedKey] : null;
+
+  // Resolve specification fields, allowing user overrides
+  const contractSize = userSpecs?.contract_size ?? defaultSpec?.contract_size ?? (assetClass === 'forex' ? 100000 : 1);
+  const quoteCurrency = userSpecs?.quote_currency ?? defaultSpec?.quote_currency ?? 'USD';
+
+  // Base risk in quote currency of the instrument
+  const baseRisk = priceDiff * contractSize * size;
+
+  // Convert to USD (standard account base currency)
+  if (exchangeRateOverride != null) {
+    return baseRisk * exchangeRateOverride;
+  }
+
+  if (quoteCurrency === 'USD') {
+    return baseRisk;
+  } else if (quoteCurrency === 'JPY') {
+    const jpyRate = symbol.startsWith('USD') ? entry : 155.0;
+    return baseRisk / jpyRate;
+  } else if (quoteCurrency === 'GBP') {
+    return baseRisk * 1.30;
+  } else if (quoteCurrency === 'EUR') {
+    return baseRisk * 1.10;
+  } else if (quoteCurrency === 'AUD') {
+    return baseRisk * 0.66;
+  } else if (quoteCurrency === 'CHF') {
+    return baseRisk / 0.90;
+  } else if (quoteCurrency === 'CAD') {
+    return baseRisk / 1.35;
+  }
+
+  return baseRisk;
+}
+
+/**
+ * Calculates position size in lots given a target risk amount.
+ */
+export function calculatePositionSize(
+  instrument: string | null,
+  targetRiskAmount: number | null,
+  entry: number | null,
+  stop: number | null,
+  assetClass: AssetClass | null,
+  userSpecs?: Partial<InstrumentSpec>,
+  exchangeRateOverride?: number
+): number | null {
+  if (!instrument || targetRiskAmount == null || entry == null || stop == null) return null;
+  const priceDiff = Math.abs(entry - stop);
+  if (priceDiff === 0) return null;
+
+  const symbol = instrument.toUpperCase().replace(/[^A-Z0-9/]/g, '');
+  const matchedKey = Object.keys(PEPPERSTONE_SPECS).find(key => symbol.includes(key));
+  const defaultSpec = matchedKey ? PEPPERSTONE_SPECS[matchedKey] : null;
+
+  const contractSize = userSpecs?.contract_size ?? defaultSpec?.contract_size ?? (assetClass === 'forex' ? 100000 : 1);
+  const quoteCurrency = userSpecs?.quote_currency ?? defaultSpec?.quote_currency ?? 'USD';
+
+  let conversionRate = 1.0;
+  if (exchangeRateOverride != null) {
+    conversionRate = exchangeRateOverride;
+  } else if (quoteCurrency === 'JPY') {
+    const jpyRate = symbol.startsWith('USD') ? entry : 155.0;
+    conversionRate = 1.0 / jpyRate;
+  } else if (quoteCurrency === 'GBP') {
+    conversionRate = 1.30;
+  } else if (quoteCurrency === 'EUR') {
+    conversionRate = 1.10;
+  } else if (quoteCurrency === 'AUD') {
+    conversionRate = 0.66;
+  } else if (quoteCurrency === 'CHF') {
+    conversionRate = 1.0 / 0.90;
+  } else if (quoteCurrency === 'CAD') {
+    conversionRate = 1.0 / 1.35;
+  }
+
+  const rawSize = targetRiskAmount / (priceDiff * contractSize * conversionRate);
+  
+  const lotStep = userSpecs?.lot_step ?? defaultSpec?.lot_step ?? 0.01;
+  const minLot = userSpecs?.min_lot ?? defaultSpec?.min_lot ?? 0.01;
+  const maxLot = userSpecs?.max_lot ?? defaultSpec?.max_lot ?? 100;
+
+  const steppedSize = Math.max(minLot, Math.min(maxLot, Math.round(rawSize / lotStep) * lotStep));
+  return steppedSize;
+}
+
+/** Formats a risk value as currency. */
+export function formatRisk(value: number | null): string {
+  if (value == null) return '—';
+  return `$${value.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }

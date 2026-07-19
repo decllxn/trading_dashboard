@@ -19,6 +19,8 @@ import {
   computeNetPnl,
 } from '@/lib/stats';
 import { EdgeScoreGauge } from '@/components/dashboard/edge-score-gauge';
+import { DisciplineChecklist } from '@/components/dashboard/discipline-checklist';
+import { DisciplineAnalytics } from '@/components/dashboard/discipline-analytics';
 import { StatGrid } from '@/components/dashboard/stat-grid';
 import { RiskStatGrid } from '@/components/dashboard/risk-stat-grid';
 import { TradingCalendar } from '@/components/dashboard/trading-calendar';
@@ -225,34 +227,41 @@ export default async function DashboardPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[auto_1fr]">
-        <EdgeScoreGauge score={score} empty={empty} />
-
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[380px_1fr]">
         <div className="space-y-6">
-          <section>
-            <h2 className="font-display text-primary mb-3 text-xs uppercase tracking-wide">
-              Performance
-            </h2>
-            <StatGrid
-              winRate={stats.winRate}
-              expectancy={stats.expectancy}
-              profitFactor={stats.profitFactor}
-              maxDrawdown={stats.maxDrawdown}
-              streak={stats.streak}
-              empty={empty}
-            />
-          </section>
+          <EdgeScoreGauge score={score} empty={empty} />
+          <DisciplineChecklist trades={trades} />
+        </div>
 
-          <section>
-            <h2 className="font-display text-primary mb-3 text-xs uppercase tracking-wide">
-              Risk-adjusted
-            </h2>
-            <RiskStatGrid
-              sharpe={empty || sharpe == null ? null : sharpe.toFixed(2)}
-              sortino={empty || sortino == null ? null : sortino.toFixed(2)}
-              avgR={empty || avgR == null ? null : formatR(avgR)}
-            />
-          </section>
+        <div className="space-y-6 flex flex-col justify-between">
+          <div className="space-y-6">
+            <section>
+              <h2 className="font-display text-primary mb-3 text-xs uppercase tracking-wide">
+                Performance
+              </h2>
+              <StatGrid
+                winRate={stats.winRate}
+                expectancy={stats.expectancy}
+                profitFactor={stats.profitFactor}
+                maxDrawdown={stats.maxDrawdown}
+                streak={stats.streak}
+                empty={empty}
+              />
+            </section>
+
+            <section>
+              <h2 className="font-display text-primary mb-3 text-xs uppercase tracking-wide">
+                Risk-adjusted
+              </h2>
+              <RiskStatGrid
+                sharpe={empty || sharpe == null ? null : sharpe.toFixed(2)}
+                sortino={empty || sortino == null ? null : sortino.toFixed(2)}
+                avgR={empty || avgR == null ? null : formatR(avgR)}
+              />
+            </section>
+          </div>
+
+          <DisciplineAnalytics trades={trades} />
         </div>
       </div>
 

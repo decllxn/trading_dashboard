@@ -6,7 +6,8 @@ import { eq } from 'drizzle-orm';
 import {
   handleGetTrades,
   handleGetTradeStats,
-  handleSearchJournal
+  handleSearchJournal,
+  handleGetRankProgression
 } from './copilot-db.ts';
 
 const testUserId = '00000000-0000-0000-0000-000000000000';
@@ -106,6 +107,23 @@ test('Gemini copilot db handlers integration tests', { skip: !db }, async (t) =>
     const calmSearch = await handleSearchJournal(testUserId, { query: 'calm' });
     assert.equal(calmSearch.length, 1);
     assert.equal(calmSearch[0].date, '2024-01-01');
+  });
+
+  await t.test('handleGetRankProgression calculates correct active level and next target', async () => {
+    const progression = await handleGetRankProgression(testUserId);
+    // Mock settings default starting balance is 150.
+    // Closed net PNL: +150 (EUR/USD) - 50 (AAPL) = 100
+    // Current balance: 150 + 100 = 250
+    // Target 0: Novice Cadet (150)
+    // Target 1: Market Apprentice (300)
+    // 250 >= 150 and < 300 -> Rank: Novice Cadet.
+    // Next target: 300.
+    // Progress: (250 - 150) / (300 - 150) = 100 / 150 = 66.66%
+    assert.equal(progression.currentRank, 'Novice Cadet');
+    assert.equal(progression.currentBalance, 250);
+    assert.equal(progression.nextRank, 'Market Apprentice');
+    assert.equal(progression.nextRankTarget, 300);
+    assert.ok(Math.abs(progression.progressPercentage - 66.66) < 0.1);
   });
 
   // 4. Cleanup after testing
