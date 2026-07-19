@@ -1,0 +1,149 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Design tokens — single source of truth for color.
+ *
+ * Each color is stored as a space-separated RGB triplet so Tailwind can apply
+ * opacity modifiers (bg-surface/50, text-gain/80) via `rgb(var(--x) / <a>)`.
+ * Hex values are documented inline for reference; never hardcode a hex in a
+ * component — use the Tailwind utility (bg-base, text-primary, gain, loss…).
+ * See DESIGN_SYSTEM.md.
+ */
+:root {
+  /* Backgrounds */
+  --base: 11 13 16; /* #0B0D10 page background */
+  --surface: 20 23 28; /* #14171C card/panel background */
+  --surface-raised: 25 29 36; /* #191D24 raised surface */
+
+  /* Borders */
+  --hairline: 36 41 49; /* #242931 1px borders ONLY */
+
+  /* Text */
+  --primary: 232 234 237; /* #E8EAED primary text */
+  --secondary: 139 147 161; /* #8B93A1 secondary text */
+  --tertiary: 86 93 104; /* #565D68 tertiary text */
+
+  /* Accents */
+  --accent-signal: 79 209 197; /* #4FD1C5 primary interactive / instrument glow */
+  --accent-alert: 245 184 65; /* #F5B841 AI copilot / important callouts */
+
+  /* P&L — NEVER decorative */
+  --gain: 52 211 153; /* #34D399 positive P&L ONLY */
+  --loss: 248 113 113; /* #F87171 negative P&L ONLY */
+
+  /*
+   * shadcn/ui semantic layer.
+   *
+   * shadcn components consume HSL channels via hsl(var(--x) / <alpha>). These
+   * aliases point every NON-COLLIDING shadcn semantic slot at a design token
+   * so components pick up our palette the moment they're added. Never reference
+   * these in hand-written code; use the named design tokens above.
+   *
+   * Colliding keys are intentionally absent: shadcn's `--primary`, `--secondary`,
+   * and `--accent` slots share names with design-system TEXT tokens, so they are
+   * owned by the design system. When adding a shadcn component that references
+   * `bg-primary` / `bg-secondary` / `bg-accent`, restyle it to design tokens
+   * (`bg-accent-signal` for primary actions, `bg-surface-raised` for secondary)
+   * before first use — per the project rule that no shadcn component is used
+   * unstyled. See DESIGN_SYSTEM.md "shadcn/ui token mapping".
+   */
+  --background: 222 14% 7%; /* ≈ #0B0D10 -> base */
+  --foreground: 230 16% 91%; /* ≈ #E8EAED -> primary text */
+  --card: 222 17% 9%; /* ≈ #14171C -> surface */
+  --card-foreground: 230 16% 91%; /* ≈ #E8EAED -> primary text */
+  --popover: 222 17% 9%; /* ≈ #14171C -> surface */
+  --popover-foreground: 230 16% 91%; /* ≈ #E8EAED -> primary text */
+  --muted: 222 22% 12%; /* ≈ #191D24 -> surface-raised */
+  --muted-foreground: 218 9% 56%; /* ≈ #8B93A1 -> secondary text */
+  --destructive: 0 76% 71%; /* ≈ #F87171 -> loss */
+  --destructive-foreground: 230 16% 91%; /* ≈ #E8EAED -> primary text */
+  --border: 217 15% 18%; /* ≈ #242931 -> hairline */
+  --input: 217 15% 18%; /* ≈ #242931 -> hairline */
+  --ring: 175 58% 57%; /* ≈ #4FD1C5 -> accent-signal */
+  --radius: 6px; /* DESIGN_SYSTEM.md: max 6px corner radius */
+}
+
+@layer base {
+  html,
+  body {
+    height: 100vh;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+    @apply bg-base text-primary font-sans;
+  }
+
+  /*
+   * .no-scrollbar — hides the visible scrollbar on a scroll container while
+   * keeping it fully scrollable (wheel, touch, keyboard). Used on the main app
+   * content pane so the instrument-panel look isn't broken by a native gutter.
+   */
+  .no-scrollbar {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE / legacy Edge */
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none; /* Chromium / Safari */
+  }
+
+  /*
+   * .num — apply to EVERY numeric value (price, P&L, stat, percentage, count).
+   * Forces IBM Plex Mono + tabular-nums so digits align column-wise and never
+   * shift width. In tables, pair with right alignment (never center a number).
+   */
+  .num {
+    font-family: var(--font-mono), ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  /* Tiptap Editor Styles */
+  .prose-custom {
+    @apply text-primary font-sans text-sm outline-none;
+  }
+  .prose-custom p {
+    @apply mb-4 leading-relaxed;
+  }
+  .prose-custom p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
+    @apply text-tertiary;
+  }
+  .prose-custom h1 {
+    @apply font-display text-2xl text-primary mb-4 mt-6;
+  }
+  .prose-custom h2 {
+    @apply font-display text-xl text-primary mb-3 mt-5;
+  }
+  .prose-custom ul {
+    @apply list-disc list-inside mb-4;
+  }
+  .prose-custom ol {
+    @apply list-decimal list-inside mb-4;
+  }
+  .prose-custom strong {
+    @apply font-bold text-primary;
+  }
+  .prose-custom em {
+    @apply italic;
+  }
+  .prose-custom li {
+    @apply mb-1;
+  }
+  .prose-custom blockquote {
+    @apply border-l-2 border-hairline pl-4 italic text-secondary my-4;
+  }
+  .prose-custom code {
+    @apply bg-surface-raised px-1.5 py-0.5 rounded text-sm font-mono text-primary;
+  }
+  .prose-custom hr {
+    @apply border-hairline my-6;
+  }
+  .prose-custom.ProseMirror {
+    @apply min-h-full outline-none;
+  }
+}
