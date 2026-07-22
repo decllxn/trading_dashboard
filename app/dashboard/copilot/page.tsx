@@ -4,6 +4,7 @@ import { useRef, useEffect, useState } from 'react';
 import { Plus, MessageSquare, Trash2, Menu, X, Edit3, ChevronLeft, ChevronRight, XCircle, Brain } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCopilot, type Message } from '@/components/copilot/copilot-provider';
+import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 
 export default function CopilotPage() {
   const {
@@ -24,6 +25,8 @@ export default function CopilotPage() {
     handleEditPrompt,
     handleCancelRequest,
   } = useCopilot();
+
+  useBodyScrollLock(sidebarOpen);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -245,7 +248,8 @@ export default function CopilotPage() {
           <div className="w-72 border-r border-hairline bg-surface flex flex-col h-full p-4 relative">
             <button
               onClick={() => setSidebarOpen(false)}
-              className="absolute right-4 top-4 text-secondary hover:text-primary p-1 rounded-sm border border-hairline bg-base cursor-pointer"
+              aria-label="Close history drawer"
+              className="absolute right-3 top-3 text-secondary hover:text-primary min-h-[44px] min-w-[44px] flex items-center justify-center rounded-card border border-hairline bg-base cursor-pointer z-10"
             >
               <X size={16} />
             </button>

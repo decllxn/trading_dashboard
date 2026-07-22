@@ -231,7 +231,7 @@ export function JournalClient({ entries: initialEntries, trades, links: initialL
   };
 
   return (
-    <div className="flex h-full flex-col gap-6 lg:flex-row">
+    <div className="flex min-h-full h-auto lg:h-full flex-col gap-6 lg:flex-row">
       {/* Left Column: Calendar & Search */}
       <div className="w-full shrink-0 flex flex-col gap-6 lg:w-80 lg:no-scrollbar lg:overflow-y-auto">
         <h1 className="font-display text-primary text-xl">Journal</h1>
@@ -263,7 +263,8 @@ export function JournalClient({ entries: initialEntries, trades, links: initialL
             <div className="flex items-center justify-between">
               <button 
                 onClick={handlePrev}
-                className="p-1 text-secondary hover:text-primary transition-colors"
+                aria-label="Previous month or week"
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center text-secondary hover:text-primary transition-colors rounded-card"
               >
                 <ChevronLeft size={16} />
               </button>
@@ -272,13 +273,14 @@ export function JournalClient({ entries: initialEntries, trades, links: initialL
               </h2>
               <button 
                 onClick={handleNext}
-                className="p-1 text-secondary hover:text-primary transition-colors"
+                aria-label="Next month or week"
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center text-secondary hover:text-primary transition-colors rounded-card"
               >
                 <ChevronRight size={16} />
               </button>
             </div>
             
-            <div className="grid grid-cols-7 gap-1 text-center text-xs text-tertiary">
+            <div className="grid grid-cols-7 gap-1 text-center text-xs text-tertiary font-mono">
               {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => <div key={d}>{d}</div>)}
             </div>
             
@@ -304,7 +306,7 @@ export function JournalClient({ entries: initialEntries, trades, links: initialL
                     key={dayStr}
                     onClick={() => setSelectedDate(day)}
                     className={cn(
-                      "relative aspect-square flex items-center justify-center text-sm rounded transition-colors",
+                      "relative min-h-[38px] aspect-square flex items-center justify-center text-sm rounded transition-colors num font-mono",
                       isSel ? "bg-accent-signal/20 text-accent-signal font-bold" : "text-secondary hover:bg-surface-raised hover:text-primary",
                       viewMode === 'month' && !isSameMonth(day, currentDate) && "opacity-30"
                     )}
@@ -322,12 +324,12 @@ export function JournalClient({ entries: initialEntries, trades, links: initialL
 
         {/* Search Results */}
         {searchResults && (
-          <div className="no-scrollbar flex-1 overflow-auto bg-surface border border-hairline rounded-card p-4 flex flex-col gap-3">
+          <div className="no-scrollbar flex-1 bg-surface border border-hairline rounded-card p-4 flex flex-col gap-3 lg:overflow-auto">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-display text-primary uppercase tracking-wide">
                 Search Results <span className="text-tertiary font-mono num">({searchResults.length})</span>
               </h3>
-              <button onClick={() => {setSearchResults(null); setSearchQuery('');}} className="text-xs text-tertiary hover:text-primary">Clear</button>
+              <button onClick={() => {setSearchResults(null); setSearchQuery('');}} className="min-h-[44px] px-2 text-xs text-tertiary hover:text-primary">Clear</button>
             </div>
             {searchResults.length === 0 ? (
               <p className="text-sm text-tertiary">No entries found.</p>
@@ -373,7 +375,7 @@ export function JournalClient({ entries: initialEntries, trades, links: initialL
                        type="button"
                        onClick={() => handleMoodChange(isSelected ? 'none' : moodOption)}
                        className={cn(
-                         "px-2.5 py-1 text-xs border rounded transition-colors duration-150 capitalize",
+                         "min-h-[44px] px-3 py-1.5 text-xs border rounded transition-colors duration-150 capitalize flex items-center justify-center",
                          isSelected 
                            ? "border-accent-signal text-accent-signal bg-accent-signal/10 font-medium" 
                            : "border-hairline text-secondary hover:text-primary hover:border-primary bg-surface"
@@ -388,9 +390,9 @@ export function JournalClient({ entries: initialEntries, trades, links: initialL
           </div>
         </header>
         
-        <div className="flex flex-col flex-1 overflow-hidden lg:flex-row gap-6">
+        <div className="flex flex-col flex-1 gap-6 lg:flex-row lg:overflow-hidden">
           {/* Editor */}
-          <div className="no-scrollbar flex-1 overflow-auto pr-2 pb-6 min-h-[300px]">
+          <div className="no-scrollbar flex-1 pr-2 pb-6 min-h-[300px] lg:overflow-auto">
             <JournalEditor 
               key={selectedDateStr}
               initialContent={currentEntry?.content || null} 
@@ -399,12 +401,12 @@ export function JournalClient({ entries: initialEntries, trades, links: initialL
           </div>
           
           {/* Meta panel (Mistakes & Trades) */}
-          <div className="no-scrollbar w-full shrink-0 flex flex-col gap-6 overflow-y-auto pb-6 lg:w-64">
+          <div className="no-scrollbar w-full shrink-0 flex flex-col gap-6 pb-6 lg:w-64 lg:overflow-y-auto">
             <section className="bg-surface border border-hairline p-4 rounded-card">
               <h3 className="text-xs font-display text-primary uppercase tracking-wide mb-3">Mistakes</h3>
               <div className="flex flex-col gap-2">
                 {MISTAKES_LIST.map(mistake => (
-                  <label key={mistake} className="flex items-center gap-2 cursor-pointer group">
+                  <label key={mistake} className="flex items-center gap-2 cursor-pointer group min-h-[36px]">
                     <input
                       type="checkbox"
                       checked={currentEntry?.mistakes?.includes(mistake) || false}
@@ -412,7 +414,7 @@ export function JournalClient({ entries: initialEntries, trades, links: initialL
                       className="hidden"
                     />
                     <div className={cn(
-                      "w-4 h-4 rounded border flex items-center justify-center transition-colors",
+                      "w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0",
                       currentEntry?.mistakes?.includes(mistake) ? "bg-accent-signal border-accent-signal text-base" : "border-hairline bg-base group-hover:border-primary"
                     )}>
                       {currentEntry?.mistakes?.includes(mistake) && (
@@ -439,7 +441,7 @@ export function JournalClient({ entries: initialEntries, trades, links: initialL
                       <div 
                         key={trade.id} 
                         className={cn(
-                          "flex items-center justify-between p-2 rounded border transition-colors cursor-pointer shrink-0",
+                          "flex items-center justify-between p-2.5 rounded border transition-colors cursor-pointer shrink-0 min-h-[44px]",
                           isLinked ? "bg-accent-signal/10 border-accent-signal" : "bg-base border-hairline hover:border-primary",
                           !currentEntryId && "opacity-60 hover:opacity-100"
                         )}
@@ -463,8 +465,8 @@ export function JournalClient({ entries: initialEntries, trades, links: initialL
                           <p className="text-sm font-medium text-primary">{trade.instrument}</p>
                           <p className="text-xs text-secondary capitalize">{trade.direction}</p>
                         </div>
-                        <div className={cn("text-right text-sm num", isGain ? "text-gain" : "text-loss")}>
-                           {isGain ? '+' : '−'}{formatPrice(Math.abs(pnlNum))}
+                        <div className={cn("text-right text-sm num font-mono font-semibold", isGain ? "text-gain" : "text-loss")}>
+                           {isGain ? '+' : '−'}${Math.abs(pnlNum).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
                       </div>
                     );

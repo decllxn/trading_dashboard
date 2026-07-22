@@ -4,9 +4,11 @@ import React, { useState } from 'react';
 import { Button } from '@/components/button';
 import { connectBroker, connectMt5Broker } from '@/app/dashboard/settings/actions';
 import { X, Bot, Shield, Key } from 'lucide-react';
+import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 
 export function ConnectBrokerModal({ userId }: { userId: string }) {
   const [isOpen, setIsOpen] = useState(false);
+  useBodyScrollLock(isOpen);
   const [step, setStep] = useState<'select' | 'mt5' | 'loading' | 'success'>('select');
   const [brokerName, setBrokerName] = useState('Pepperstone');
   const [customBrokerName, setCustomBrokerName] = useState('');
@@ -160,13 +162,14 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
 
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-base/80 backdrop-blur-sm p-4">
-          <div className={`w-full border border-hairline bg-surface rounded-card p-5 relative max-h-[90vh] overflow-y-auto no-scrollbar transition-all ${
+          <div className={`w-full border border-hairline bg-surface rounded-card p-5 relative max-h-[85vh] overflow-y-auto no-scrollbar transition-all ${
             step === 'success' ? 'max-w-xl' : 'max-w-md'
           }`}>
             {/* Close Button */}
             <button
               onClick={handleClose}
-              className="absolute right-4 top-4 text-secondary hover:text-primary p-1 rounded-sm border border-hairline bg-base cursor-pointer"
+              aria-label="Close broker modal"
+              className="absolute right-3 top-3 min-h-[44px] min-w-[44px] flex items-center justify-center text-secondary hover:text-primary rounded-card border border-hairline bg-base cursor-pointer"
             >
               <X size={14} />
             </button>

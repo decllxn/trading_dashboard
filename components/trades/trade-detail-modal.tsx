@@ -19,12 +19,15 @@ import { ScreenshotGallery } from './screenshot-gallery';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 
+import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
+
 interface TradeDetailModalProps {
   trade: TradeRow;
   onClose: () => void;
 }
 
 export function TradeDetailModal({ trade, onClose }: TradeDetailModalProps) {
+  useBodyScrollLock(true);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteInput, setDeleteInput] = useState('');
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -50,23 +53,23 @@ export function TradeDetailModal({ trade, onClose }: TradeDetailModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-base/90 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-base/90 p-3 sm:p-4">
       {/* Modal Container */}
-      <div className="w-full max-w-2xl border border-hairline bg-surface rounded-card max-h-[90vh] overflow-y-auto no-scrollbar">
-        {/* Header */}
-        <header className="flex items-center justify-between border-b border-hairline px-6 py-4">
-          <div className="flex items-center gap-3">
-            <h2 className="font-display text-primary text-lg font-medium tracking-tight">
+      <div className="w-full max-w-2xl border border-hairline bg-surface rounded-card max-h-[85vh] flex flex-col overflow-hidden shadow-none">
+        {/* Sticky Header */}
+        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-hairline bg-surface px-4 py-3 sm:px-6 sm:py-4 shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <h2 className="font-display text-primary text-base sm:text-lg font-medium tracking-tight truncate">
               {trade.instrument}
             </h2>
             <Link
               href={`/dashboard/trades/${trade.id}`}
-              className="text-secondary hover:text-accent-signal transition-colors inline-flex items-center gap-1"
+              className="text-secondary hover:text-accent-signal transition-colors inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-card"
               title="Open full page"
             >
               <ArrowUpRight size={14} />
             </Link>
-            <span className="flex items-center gap-1 px-2 py-0.5 border border-hairline rounded text-[10px] font-medium text-secondary uppercase">
+            <span className="flex items-center gap-1 px-2 py-0.5 border border-hairline rounded text-[10px] font-medium text-secondary uppercase shrink-0">
               {trade.direction === 'long' ? (
                 <ArrowUpRight size={10} className="text-secondary" />
               ) : (
@@ -74,7 +77,7 @@ export function TradeDetailModal({ trade, onClose }: TradeDetailModalProps) {
               )}
               {trade.direction}
             </span>
-            <span className="px-2 py-0.5 border border-hairline rounded text-[10px] font-medium text-secondary uppercase">
+            <span className="px-2 py-0.5 border border-hairline rounded text-[10px] font-medium text-secondary uppercase shrink-0">
               {trade.status}
             </span>
           </div>
@@ -82,21 +85,22 @@ export function TradeDetailModal({ trade, onClose }: TradeDetailModalProps) {
           <button
             type="button"
             onClick={onClose}
-            className="text-secondary hover:text-primary transition-colors p-1"
+            aria-label="Close detail modal"
+            className="text-secondary hover:text-primary transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center rounded-card"
           >
             <X size={16} />
           </button>
         </header>
 
-        {/* Modal Content */}
-        <div className="p-6 space-y-6">
+        {/* Scrollable Body Content */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 no-scrollbar">
           {/* Top Headline Stats */}
-          <div className="grid grid-cols-3 gap-4 border border-hairline/60 bg-surface-raised/40 p-4 rounded-card">
+          <div className="grid grid-cols-3 gap-3 border border-hairline/60 bg-surface-raised/40 p-3 sm:p-4 rounded-card">
             <div>
               <span className="text-tertiary text-[10px] uppercase tracking-wide font-sans block mb-1">
                 Net P&amp;L
               </span>
-              <span className={cn('num text-lg font-semibold block', pnlColorClass(trade.pnl))}>
+              <span className={cn('num text-base sm:text-lg font-semibold block', pnlColorClass(trade.pnl))}>
                 {formatPnl(trade.pnl)}
               </span>
             </div>
@@ -104,7 +108,7 @@ export function TradeDetailModal({ trade, onClose }: TradeDetailModalProps) {
               <span className="text-tertiary text-[10px] uppercase tracking-wide font-sans block mb-1">
                 R-Multiple
               </span>
-              <span className={cn('num text-lg font-semibold block', rColorClass(trade.rMultiple))}>
+              <span className={cn('num text-base sm:text-lg font-semibold block', rColorClass(trade.rMultiple))}>
                 {trade.rMultiple != null ? formatR(trade.rMultiple) : '—'}
               </span>
             </div>
@@ -112,7 +116,7 @@ export function TradeDetailModal({ trade, onClose }: TradeDetailModalProps) {
               <span className="text-tertiary text-[10px] uppercase tracking-wide font-sans block mb-1">
                 Size
               </span>
-              <span className="num text-primary text-lg block">
+              <span className="num text-primary text-base sm:text-lg block">
                 {trade.size != null ? trade.size.toLocaleString() : '—'}
               </span>
             </div>
@@ -233,7 +237,7 @@ export function TradeDetailModal({ trade, onClose }: TradeDetailModalProps) {
                 type="text"
                 value={deleteInput}
                 onChange={(e) => setDeleteInput(e.target.value)}
-                className="w-full bg-surface border border-hairline focus:border-accent-signal focus:outline-none rounded-card px-3 py-2 text-sm text-primary font-mono placeholder-tertiary"
+                className="w-full bg-surface border border-hairline focus:border-accent-signal focus:outline-none rounded-card px-3 py-2 text-sm text-primary font-mono placeholder-tertiary min-h-[44px]"
                 placeholder={trade.instrument}
                 autoFocus
               />
@@ -245,7 +249,7 @@ export function TradeDetailModal({ trade, onClose }: TradeDetailModalProps) {
                     setDeleteInput('');
                     setDeleteError(null);
                   }}
-                  className="text-secondary hover:text-primary px-3 py-1.5 text-xs transition-colors duration-150"
+                  className="text-secondary hover:text-primary px-3 py-2 text-xs min-h-[44px] transition-colors duration-150"
                 >
                   Cancel
                 </button>
@@ -253,7 +257,7 @@ export function TradeDetailModal({ trade, onClose }: TradeDetailModalProps) {
                   type="button"
                   disabled={deleteInput !== trade.instrument || isPending}
                   onClick={handleDelete}
-                  className="border border-loss/60 bg-loss/10 text-loss hover:bg-loss/20 disabled:pointer-events-none disabled:opacity-30 rounded-card px-3 py-1.5 text-xs font-semibold transition-colors duration-150"
+                  className="border border-loss/60 bg-loss/10 text-loss hover:bg-loss/20 disabled:pointer-events-none disabled:opacity-30 rounded-card px-4 py-2 text-xs font-semibold min-h-[44px] transition-colors duration-150"
                 >
                   {isPending ? 'Deleting…' : 'Confirm Delete'}
                 </button>
@@ -265,13 +269,13 @@ export function TradeDetailModal({ trade, onClose }: TradeDetailModalProps) {
           ) : null}
         </div>
 
-        {/* Footer */}
+        {/* Sticky Action Footer */}
         {!isDeleting && (
-          <footer className="flex items-center justify-between border-t border-hairline px-6 py-4 bg-surface-raised/20">
+          <footer className="sticky bottom-0 z-20 flex items-center justify-between border-t border-hairline px-4 py-3 sm:px-6 bg-surface shrink-0">
             <button
               type="button"
               onClick={() => setIsDeleting(true)}
-              className="text-secondary hover:text-loss border border-hairline hover:border-loss/50 rounded-card px-3 py-2 text-xs font-medium inline-flex items-center gap-1.5 transition-colors duration-150"
+              className="text-secondary hover:text-loss border border-hairline hover:border-loss/50 rounded-card px-3 py-2 text-xs font-medium inline-flex items-center gap-1.5 transition-colors duration-150 min-h-[44px]"
             >
               <Trash2 size={13} />
               Delete trade
@@ -280,7 +284,7 @@ export function TradeDetailModal({ trade, onClose }: TradeDetailModalProps) {
             <button
               type="button"
               onClick={onClose}
-              className="bg-surface-raised text-primary border border-hairline hover:bg-surface-raised/85 rounded-card px-4 py-2 text-xs font-medium transition-colors"
+              className="bg-surface-raised text-primary border border-hairline hover:bg-surface-raised/85 rounded-card px-5 py-2 text-xs font-medium transition-colors min-h-[44px] min-w-[80px]"
             >
               Close
             </button>

@@ -53,11 +53,21 @@ export function TradesTable({ trades, tags }: TradesTableProps) {
   });
   const [filters, setFilters] = useState<TradeFilters>(DEFAULT_FILTERS);
   const [selectedTrade, setSelectedTrade] = useState<TradeRow | null>(null);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const pageSize = 15;
 
   const visible = useMemo(() => {
     const filtered = filterTrades(trades, filters);
     return sortTrades(filtered, sort);
   }, [trades, filters, sort]);
+
+  const totalPages = Math.max(1, Math.ceil(visible.length / pageSize));
+  const pageIndex = Math.min(currentPage, totalPages);
+
+  const paginatedVisible = useMemo(() => {
+    const start = (pageIndex - 1) * pageSize;
+    return visible.slice(start, start + pageSize);
+  }, [visible, pageIndex, pageSize]);
 
   const hasAnyTrades = trades.length > 0;
   const hasFilters = !filtersAreEmpty(filters);
@@ -68,6 +78,12 @@ export function TradesTable({ trades, tags }: TradesTableProps) {
         ? { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' }
         : { key, direction: 'asc' },
     );
+    setCurrentPage(1);
+  }
+
+  function handleFilterChange(newFilters: TradeFilters) {
+    setFilters(newFilters);
+    setCurrentPage(1);
   }
 
   return (
@@ -75,106 +91,203 @@ export function TradesTable({ trades, tags }: TradesTableProps) {
       {hasAnyTrades ? (
         <TradeFiltersBar
           filters={filters}
-          onChange={setFilters}
+          onChange={handleFilterChange}
           tags={tags}
           canClear={hasFilters}
-          onClear={() => setFilters(DEFAULT_FILTERS)}
+          onClear={() => handleFilterChange(DEFAULT_FILTERS)}
         />
       ) : null}
 
       {visible.length === 0 ? (
         hasAnyTrades ? (
-          <NoMatches onClear={() => setFilters(DEFAULT_FILTERS)} />
+          <NoMatches onClear={() => handleFilterChange(DEFAULT_FILTERS)} />
         ) : (
           <NoTrades />
         )
       ) : (
-        <div className="border-hairline bg-surface overflow-hidden rounded-card border">
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr className="text-tertiary border-hairline border-b">
-                  <SortableTh
-                    label="Instrument"
-                    sortKey="instrument"
-                    sort={sort}
-                    onToggle={toggleSort}
-                  />
-                  <SortableTh
-                    label="Direction"
-                    sortKey="direction"
-                    sort={sort}
-                    onToggle={toggleSort}
-                  />
-                  <SortableTh
-                    label="Entry"
-                    sortKey="entryPrice"
-                    sort={sort}
-                    onToggle={toggleSort}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="Exit"
-                    sortKey="exitPrice"
-                    sort={sort}
-                    onToggle={toggleSort}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="P&L"
-                    sortKey="pnl"
-                    sort={sort}
-                    onToggle={toggleSort}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="R"
-                    sortKey="rMultiple"
-                    sort={sort}
-                    onToggle={toggleSort}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="Status"
-                    sortKey="status"
-                    sort={sort}
-                    onToggle={toggleSort}
-                  />
-                  <th className="text-tertiary px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wide">
-                    Daily PD
-                  </th>
-                  <th className="text-tertiary px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wide">
-                    1h PD
-                  </th>
-                  <th className="text-tertiary px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wide">
-                    30m PD
-                  </th>
-                  <th className="text-tertiary px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wide">
-                    Tags
-                  </th>
-                  <SortableTh
-                    label="Date"
-                    sortKey="entryTime"
-                    sort={sort}
-                    onToggle={toggleSort}
-                    align="right"
-                  />
-                  <th className="text-tertiary px-3 py-2 text-right text-[10px] font-normal uppercase tracking-wide">
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map((t) => (
-                  <TradeTableRow
-                    key={t.id}
-                    trade={t}
-                    onSelect={() => setSelectedTrade(t)}
-                  />
-                ))}
-              </tbody>
-            </table>
+        <div className="space-y-3">
+          {/* Desktop Data Table (sm:block) */}
+          <div className="hidden sm:block border-hairline bg-surface overflow-hidden rounded-card border">
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr className="text-tertiary border-hairline border-b">
+                    <SortableTh
+                      label="Instrument"
+                      sortKey="instrument"
+                      sort={sort}
+                      onToggle={toggleSort}
+                    />
+                    <SortableTh
+                      label="Direction"
+                      sortKey="direction"
+                      sort={sort}
+                      onToggle={toggleSort}
+                    />
+                    <SortableTh
+                      label="Entry"
+                      sortKey="entryPrice"
+                      sort={sort}
+                      onToggle={toggleSort}
+                      align="right"
+                    />
+                    <SortableTh
+                      label="Exit"
+                      sortKey="exitPrice"
+                      sort={sort}
+                      onToggle={toggleSort}
+                      align="right"
+                    />
+                    <SortableTh
+                      label="P&L"
+                      sortKey="pnl"
+                      sort={sort}
+                      onToggle={toggleSort}
+                      align="right"
+                    />
+                    <SortableTh
+                      label="R"
+                      sortKey="rMultiple"
+                      sort={sort}
+                      onToggle={toggleSort}
+                      align="right"
+                    />
+                    <SortableTh
+                      label="Status"
+                      sortKey="status"
+                      sort={sort}
+                      onToggle={toggleSort}
+                    />
+                    <th className="text-tertiary px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wide">
+                      Daily PD
+                    </th>
+                    <th className="text-tertiary px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wide">
+                      1h PD
+                    </th>
+                    <th className="text-tertiary px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wide">
+                      30m PD
+                    </th>
+                    <th className="text-tertiary px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wide">
+                      Tags
+                    </th>
+                    <SortableTh
+                      label="Date"
+                      sortKey="entryTime"
+                      sort={sort}
+                      onToggle={toggleSort}
+                      align="right"
+                    />
+                    <th className="text-tertiary px-3 py-2 text-right text-[10px] font-normal uppercase tracking-wide">
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedVisible.map((t) => (
+                    <TradeTableRow
+                      key={t.id}
+                      trade={t}
+                      onSelect={() => setSelectedTrade(t)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
+
+          {/* Mobile Card Reflow View (< sm) */}
+          <div className="block sm:hidden space-y-2.5">
+            {paginatedVisible.map((t) => (
+              <div
+                key={t.id}
+                onClick={() => setSelectedTrade(t)}
+                className="border border-hairline bg-surface hover:border-hairline/80 rounded-card p-3.5 space-y-2.5 cursor-pointer transition-colors duration-150"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-display text-primary text-sm font-bold">
+                      {t.instrument}
+                    </span>
+                    <span className="px-1.5 py-0.5 border border-hairline rounded text-[9px] font-mono text-secondary uppercase">
+                      {t.direction}
+                    </span>
+                    <span className="px-1.5 py-0.5 border border-hairline rounded text-[9px] font-mono text-tertiary uppercase">
+                      {t.status}
+                    </span>
+                  </div>
+                  <span className="num text-tertiary text-xs font-mono">
+                    {formatEntryDate(t.entryTime)}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs border-y border-hairline/40 py-2">
+                  <div>
+                    <span className="text-tertiary text-[9px] uppercase tracking-wider block font-display">P&amp;L</span>
+                    <span className={cn('num text-sm font-semibold', pnlColorClass(t.pnl))}>
+                      {formatPnlCell(t.pnl)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-tertiary text-[9px] uppercase tracking-wider block font-display">R-Multiple</span>
+                    <span className={cn('num text-sm font-semibold', rColorClass(t.rMultiple))}>
+                      {formatR(t.rMultiple)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-tertiary text-[9px] uppercase tracking-wider block font-display">Entry Price</span>
+                    <span className="num text-primary">{formatPrice(t.entryPrice, t.assetClass)}</span>
+                  </div>
+                  <div>
+                    <span className="text-tertiary text-[9px] uppercase tracking-wider block font-display">Exit Price</span>
+                    <span className="num text-primary">{formatPrice(t.exitPrice, t.assetClass)}</span>
+                  </div>
+                </div>
+
+                {t.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1 pt-0.5">
+                    {t.tags.map((tag) => (
+                      <span
+                        key={tag.id}
+                        className="border-hairline text-secondary rounded border px-1.5 py-0.5 text-[9px] uppercase font-mono"
+                      >
+                        {tag.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-hairline bg-surface/40 rounded-card border px-4 py-2.5 text-xs">
+              <span className="text-secondary font-mono text-xs">
+                Page <span className="num text-primary font-semibold">{pageIndex}</span> of{' '}
+                <span className="num text-primary font-semibold">{totalPages}</span>{' '}
+                <span className="text-tertiary">({visible.length} trades)</span>
+              </span>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={pageIndex <= 1}
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  className="min-h-[44px] min-w-[44px] flex items-center justify-center border border-hairline bg-base text-secondary hover:text-primary rounded-card transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                >
+                  Prev
+                </button>
+                <button
+                  type="button"
+                  disabled={pageIndex >= totalPages}
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  className="min-h-[44px] min-w-[44px] flex items-center justify-center border border-hairline bg-base text-secondary hover:text-primary rounded-card transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

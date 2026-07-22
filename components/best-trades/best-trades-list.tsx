@@ -5,6 +5,7 @@ import { deleteBestTrade } from '@/app/dashboard/best-trades/actions';
 import { Calendar, Trash2, Link2, X, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
+import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 
 export interface BestTradeItem {
   id: string;
@@ -39,6 +40,7 @@ interface BestTradesListProps {
 
 export function BestTradesList({ items }: BestTradesListProps) {
   const [selectedTrade, setSelectedTrade] = useState<BestTradeItem | null>(null);
+  useBodyScrollLock(selectedTrade !== null);
   const [activeImageIdx, setActiveImageIdx] = useState(0);
   const [isDeleting, setIsDeleting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -181,20 +183,12 @@ export function BestTradesList({ items }: BestTradesListProps) {
 
       {/* Detail Modal */}
       {selectedTrade && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-base/80 backdrop-blur-sm p-4">
-          <div className="w-full max-w-4xl border border-hairline bg-surface rounded-card p-5 relative max-h-[90vh] overflow-y-auto no-scrollbar">
-            {/* Close */}
-            <button
-              onClick={() => setSelectedTrade(null)}
-              className="absolute right-4 top-4 text-secondary hover:text-primary p-1 rounded-sm border border-hairline bg-base cursor-pointer z-10"
-            >
-              <X size={14} />
-            </button>
-
-            {/* Title / Header */}
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pr-8 border-b border-hairline/40 pb-3">
-              <div>
-                <h3 className="font-display text-base font-bold text-primary tracking-wide">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-base/80 backdrop-blur-sm p-3 sm:p-4">
+          <div className="w-full max-w-4xl border border-hairline bg-surface rounded-card max-h-[85vh] flex flex-col overflow-hidden relative shadow-none">
+            {/* Sticky Header */}
+            <div className="sticky top-0 z-20 flex items-center justify-between border-b border-hairline bg-surface px-4 py-3 sm:px-6 shrink-0">
+              <div className="min-w-0 pr-4">
+                <h3 className="font-display text-base font-bold text-primary tracking-wide truncate">
                   {selectedTrade.instrument} — Week Setup Details
                 </h3>
                 <p className="text-[10px] text-secondary mt-0.5 font-mono tabular-nums">
@@ -202,7 +196,7 @@ export function BestTradesList({ items }: BestTradesListProps) {
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 {selectedTrade.wasTaken ? (
                   <span className="border border-accent-signal/30 text-accent-signal bg-accent-signal/5 font-mono text-[10px] font-semibold px-2.5 py-1 rounded-sm">
                     TAKEN {selectedTrade.rMultiple ? `(${Number(selectedTrade.rMultiple).toFixed(2)}R)` : ''}
@@ -213,104 +207,126 @@ export function BestTradesList({ items }: BestTradesListProps) {
                   </span>
                 )}
                 <button
-                  onClick={(e) => handleDelete(selectedTrade.id, e)}
-                  disabled={isDeleting}
-                  className="bg-base border border-hairline hover:border-loss/40 hover:text-loss text-secondary p-2 rounded-sm transition-colors cursor-pointer"
+                  onClick={() => setSelectedTrade(null)}
+                  aria-label="Close setup modal"
+                  className="min-h-[44px] min-w-[44px] flex items-center justify-center text-secondary hover:text-primary rounded-card border border-hairline bg-base cursor-pointer"
                 >
-                  <Trash2 size={13} />
+                  <X size={14} />
                 </button>
               </div>
             </div>
 
-            {errorMsg && (
-              <p className="rounded-card border border-loss/20 bg-loss/10 p-3 text-xs text-loss mb-4">
-                {errorMsg}
-              </p>
-            )}
+            {/* Scrollable Body Content */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 no-scrollbar">
+              {errorMsg && (
+                <p className="rounded-card border border-loss/20 bg-loss/10 p-3 text-xs text-loss">
+                  {errorMsg}
+                </p>
+              )}
 
-            {/* Layout split */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-              {/* Media viewer */}
-              <div className="lg:col-span-7 space-y-3">
-                {selectedTrade.images && selectedTrade.images.length > 0 ? (
-                  <div className="space-y-2">
-                    {/* Big image */}
-                    <div className="relative aspect-video w-full border border-hairline bg-base rounded overflow-hidden">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={selectedTrade.images[activeImageIdx]}
-                        alt="Best trade screenshot"
-                        className="h-full w-full object-contain"
-                      />
-                    </div>
-                    {/* Thumbnail gallery */}
-                    {selectedTrade.images.length > 1 && (
-                      <div className="flex gap-2 overflow-x-auto py-1 no-scrollbar">
-                        {selectedTrade.images.map((img, idx) => (
-                          <button
-                            key={img}
-                            onClick={() => setActiveImageIdx(idx)}
-                            className={cn(
-                              "relative h-12 w-20 rounded border bg-base overflow-hidden shrink-0 transition-colors cursor-pointer",
-                              activeImageIdx === idx ? "border-accent-signal" : "border-hairline"
-                            )}
-                          >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={img} alt="Thumb" className="h-full w-full object-cover" />
-                          </button>
-                        ))}
+              {/* Layout split */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                {/* Media viewer */}
+                <div className="lg:col-span-7 space-y-3">
+                  {selectedTrade.images && selectedTrade.images.length > 0 ? (
+                    <div className="space-y-2">
+                      {/* Big image */}
+                      <div className="relative aspect-video w-full border border-hairline bg-base rounded overflow-hidden">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={selectedTrade.images[activeImageIdx]}
+                          alt="Best trade screenshot"
+                          className="h-full w-full object-contain"
+                        />
                       </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="aspect-video w-full border border-hairline bg-base flex flex-col items-center justify-center rounded text-tertiary">
-                    <Calendar size={28} />
-                    <span className="text-[10px] uppercase font-semibold mt-1">No chart screenshot uploaded</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Data / Notes */}
-              <div className="lg:col-span-5 space-y-4">
-                <div className="border border-hairline bg-base p-4 rounded-card">
-                  <h4 className="font-display text-[10px] font-bold text-primary uppercase tracking-wider mb-3">
-                    Setup Alignments
-                  </h4>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <span className="text-tertiary font-display text-[9px] uppercase tracking-wider font-bold">Daily PD Array</span>
-                      <p className="text-secondary text-xs mt-0.5">{selectedTrade.dailyPdArray || 'None'}</p>
+                      {/* Thumbnail gallery */}
+                      {selectedTrade.images.length > 1 && (
+                        <div className="flex gap-2 overflow-x-auto py-1 no-scrollbar">
+                          {selectedTrade.images.map((img, idx) => (
+                            <button
+                              key={img}
+                              onClick={() => setActiveImageIdx(idx)}
+                              className={cn(
+                                "relative h-12 w-20 rounded border bg-base overflow-hidden shrink-0 transition-colors cursor-pointer min-h-[44px]",
+                                activeImageIdx === idx ? "border-accent-signal" : "border-hairline"
+                              )}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={img} alt="Thumb" className="h-full w-full object-cover" />
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <div>
-                      <span className="text-tertiary font-display text-[9px] uppercase tracking-wider font-bold">Hourly/30m PD Array</span>
-                      <p className="text-secondary text-xs mt-0.5">{selectedTrade.hourlyPdArray || 'None'}</p>
-                    </div>
-                  </div>
-
-                  {selectedTrade.linkedTradeId && (
-                    <div className="mt-4 pt-3 border-t border-hairline/40">
-                      <span className="text-tertiary font-display text-[9px] uppercase tracking-wider font-bold block">Linked Trade execution</span>
-                      <Link
-                        href={`/dashboard/trades/${selectedTrade.linkedTradeId}`}
-                        className="text-accent-signal hover:underline text-xs mt-0.5 inline-flex items-center gap-1"
-                      >
-                        <Link2 size={12} />
-                        View Execution Log
-                      </Link>
+                  ) : (
+                    <div className="aspect-video w-full border border-hairline bg-base flex flex-col items-center justify-center rounded text-tertiary">
+                      <Calendar size={28} />
+                      <span className="text-[10px] uppercase font-semibold mt-1">No chart screenshot uploaded</span>
                     </div>
                   )}
                 </div>
 
-                <div className="border border-hairline bg-base p-4 rounded-card flex-1">
-                  <h4 className="font-display text-[10px] font-bold text-primary uppercase tracking-wider mb-2">
-                    Analysis Notes
-                  </h4>
-                  <p className="text-secondary text-xs leading-relaxed whitespace-pre-wrap">
-                    {selectedTrade.notes || 'No analysis notes provided.'}
-                  </p>
+                {/* Data / Notes */}
+                <div className="lg:col-span-5 space-y-4">
+                  <div className="border border-hairline bg-base p-4 rounded-card">
+                    <h4 className="font-display text-[10px] font-bold text-primary uppercase tracking-wider mb-3">
+                      Setup Alignments
+                    </h4>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <span className="text-tertiary font-display text-[9px] uppercase tracking-wider font-bold">Daily PD Array</span>
+                        <p className="text-secondary text-xs mt-0.5">{selectedTrade.dailyPdArray || 'None'}</p>
+                      </div>
+                      <div>
+                        <span className="text-tertiary font-display text-[9px] uppercase tracking-wider font-bold">Hourly/30m PD Array</span>
+                        <p className="text-secondary text-xs mt-0.5">{selectedTrade.hourlyPdArray || 'None'}</p>
+                      </div>
+                    </div>
+
+                    {selectedTrade.linkedTradeId && (
+                      <div className="mt-4 pt-3 border-t border-hairline/40">
+                        <span className="text-tertiary font-display text-[9px] uppercase tracking-wider font-bold block">Linked Trade execution</span>
+                        <Link
+                          href={`/dashboard/trades/${selectedTrade.linkedTradeId}`}
+                          className="text-accent-signal hover:underline text-xs mt-0.5 inline-flex items-center gap-1 min-h-[44px]"
+                        >
+                          <Link2 size={12} />
+                          View Execution Log
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="border border-hairline bg-base p-4 rounded-card flex-1">
+                    <h4 className="font-display text-[10px] font-bold text-primary uppercase tracking-wider mb-2">
+                      Analysis Notes
+                    </h4>
+                    <p className="text-secondary text-xs leading-relaxed whitespace-pre-wrap">
+                      {selectedTrade.notes || 'No analysis notes provided.'}
+                    </p>
+                  </div>
                 </div>
               </div>
+            </div>
+
+            {/* Sticky Action Footer */}
+            <div className="sticky bottom-0 z-20 border-t border-hairline bg-surface p-4 sm:px-6 flex items-center justify-between shrink-0">
+              <button
+                onClick={(e) => handleDelete(selectedTrade.id, e)}
+                disabled={isDeleting}
+                className="bg-base border border-hairline hover:border-loss/40 text-secondary hover:text-loss min-h-[44px] px-3.5 py-2 rounded-card text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <Trash2 size={13} />
+                Delete Setup
+              </button>
+
+              <button
+                onClick={() => setSelectedTrade(null)}
+                className="bg-surface-raised text-primary border border-hairline hover:bg-surface-raised/85 rounded-card px-5 py-2 text-xs font-medium min-h-[44px] min-w-[80px] transition-colors"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
