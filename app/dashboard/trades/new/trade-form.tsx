@@ -893,14 +893,14 @@ export function TradeForm({ tags, initialData }: TradeFormProps) {
         </div>
       </section>
 
-      <div className="border-hairline flex items-center justify-end gap-3 border-t pt-6">
+      <div className="sticky bottom-0 z-20 border-hairline flex items-center justify-end gap-3 border-t bg-surface p-4 rounded-card shrink-0">
         <Link
           href="/dashboard/trades"
-          className="text-secondary hover:text-primary rounded-card px-4 py-2 text-sm transition-colors duration-150"
+          className="text-secondary hover:text-primary rounded-card px-4 py-2 text-xs font-medium transition-colors duration-150 min-h-[44px] flex items-center justify-center border border-hairline bg-base"
         >
           Cancel
         </Link>
-        <SubmitButton pendingLabel={isEdit ? 'Updating…' : 'Saving…'}>
+        <SubmitButton pendingLabel={isEdit ? 'Updating…' : 'Saving…'} className="min-h-[44px]">
           {isEdit ? 'Update trade' : 'Save trade'}
         </SubmitButton>
       </div>

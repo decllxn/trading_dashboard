@@ -64,3 +64,9 @@ next-env.d.ts
 
 # Linter caches
 .eslintcache
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/

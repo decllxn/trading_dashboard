@@ -51,7 +51,7 @@ export function TradeFiltersBar({
   };
 
   return (
-    <div className="border-hairline bg-surface flex flex-wrap items-end gap-3 rounded-card border p-3">
+    <div className="border-hairline bg-surface grid grid-cols-2 gap-2.5 sm:flex sm:flex-wrap sm:items-end rounded-card border p-3">
       <FilterField id="filter-assetClass" label="Asset class">
         <Select
           id="filter-assetClass"
@@ -120,19 +120,21 @@ export function TradeFiltersBar({
         />
       </FilterField>
 
-      <button
-        type="button"
-        onClick={onClear}
-        disabled={!canClear}
-        className={cn(
-          'rounded-card px-3 py-2 text-xs transition-colors duration-150',
-          canClear
-            ? 'text-secondary hover:text-primary'
-            : 'text-tertiary cursor-not-allowed',
-        )}
-      >
-        Clear
-      </button>
+      <div className="col-span-2 sm:col-span-1 flex items-end">
+        <button
+          type="button"
+          onClick={onClear}
+          disabled={!canClear}
+          className={cn(
+            'rounded-card px-3 py-2 text-xs transition-colors duration-150 min-h-[44px] w-full sm:w-auto',
+            canClear
+              ? 'text-secondary hover:text-primary'
+              : 'text-tertiary cursor-not-allowed',
+          )}
+        >
+          Clear
+        </button>
+      </div>
     </div>
   );
 }
@@ -152,7 +154,7 @@ function FilterField({
       <Label htmlFor={id} className="text-[10px]">
         {label}
       </Label>
-      <div className="w-36">{children}</div>
+      <div className="w-full sm:w-36">{children}</div>
     </div>
   );
 }

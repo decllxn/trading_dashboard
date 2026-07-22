@@ -252,142 +252,144 @@ export function TradingCalendar({ trades }: TradingCalendarProps) {
         </button>
       </div>
 
-      {/* Grid Layout */}
-      <div className="w-full">
-        {/* Column Headers */}
-        <div className="grid grid-cols-8 gap-1.5 mb-2 border-b border-hairline/60 pb-2">
-          {WEEKDAYS.map((day) => (
-            <div
-              key={day}
-              className="text-tertiary text-center text-[10px] uppercase tracking-wider font-display"
-            >
-              {day}
-            </div>
-          ))}
-          <div className="text-accent-signal text-center text-[10px] uppercase tracking-wider font-display">
-            Weekly
-          </div>
-        </div>
-
-        {/* Calendar Rows */}
-        <div className="space-y-1.5">
-          {grid.map((week, wIndex) => {
-            // Compute weekly summary metrics
-            let weeklyPnl = 0;
-            let weeklyR = 0;
-            let weeklyCount = 0;
-
-            for (const day of week) {
-              const summary = dailyData.get(day.dateKey);
-              if (summary) {
-                weeklyPnl += summary.pnl;
-                weeklyR += summary.rMultiple;
-                weeklyCount += summary.count;
-              }
-            }
-
-            return (
-              <div key={`week-${wIndex}`} className="grid grid-cols-8 gap-1.5">
-                {/* 7 Days of the Week */}
-                {week.map((day) => {
-                  const summary = dailyData.get(day.dateKey);
-                  const hasTrades = summary && summary.count > 0;
-                  
-                  // Color codes following DESIGN_SYSTEM.md guidelines
-                  let cellBgClass = 'bg-base/30 border-hairline';
-                  let pnlColor = 'text-primary';
-
-                  if (hasTrades) {
-                    if (summary.pnl > 0) {
-                      cellBgClass = 'bg-[#34D399]/5 border-[#34D399]/20 hover:bg-[#34D399]/10';
-                      pnlColor = 'text-gain';
-                    } else if (summary.pnl < 0) {
-                      cellBgClass = 'bg-[#F87171]/5 border-[#F87171]/20 hover:bg-[#F87171]/10';
-                      pnlColor = 'text-loss';
-                    } else {
-                      // Neutral / Scratch days (profit == 0 but trades taken)
-                      cellBgClass = 'bg-[#4FD1C5]/5 border-[#4FD1C5]/20 hover:bg-[#4FD1C5]/10';
-                      pnlColor = 'text-accent-signal';
-                    }
-                  }
-
-                  return (
-                    <div
-                      key={day.dateKey}
-                      onClick={() => hasTrades && setSelectedDateKey(day.dateKey)}
-                      className={cn(
-                        'relative flex min-h-[84px] flex-col justify-between border rounded-card p-2 transition-colors duration-150',
-                        cellBgClass,
-                        !day.isCurrentMonth && 'opacity-30',
-                        hasTrades && 'cursor-pointer hover:border-accent-signal/40'
-                      )}
-                    >
-                      {/* Day Number Label */}
-                      <span className="text-secondary text-[10px] font-mono leading-none align-top">
-                        {day.dayNumber}
-                      </span>
-
-                      {/* Day Stats (only visible if trades were executed) */}
-                      {hasTrades ? (
-                        <div className="mt-1 flex flex-col items-end w-full">
-                          {/* Daily PnL */}
-                          <span className={cn('num text-xs font-bold leading-tight font-mono', pnlColorClass(summary.pnl))}>
-                            {formatCalendarPnl(summary.pnl)}
-                          </span>
-                          
-                          {/* Trades count and realized R */}
-                          <div className="mt-1 flex flex-col items-end text-[9px] text-tertiary font-mono space-y-0.5 leading-none">
-                            <span className="num">
-                              {summary.count} {summary.count === 1 ? 'trade' : 'trades'}
-                            </span>
-                            <span className={cn('num font-medium', summary.rMultiple > 0 ? 'text-gain' : summary.rMultiple < 0 ? 'text-loss' : 'text-tertiary')}>
-                              {summary.rMultiple > 0 ? '+' : ''}
-                              {summary.rMultiple.toFixed(1)}R
-                            </span>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="h-8" /> /* Spacing placeholder */
-                      )}
-                    </div>
-                  );
-                })}
-
-                {/* 8th Column: Weekly Metrics Summary */}
-                <div
-                  className={cn(
-                    'border-hairline bg-base flex min-h-[84px] flex-col justify-between rounded-card border p-2 text-right',
-                    weeklyCount > 0 && weeklyPnl > 0 && 'border-[#34D399]/20 bg-[#34D399]/5',
-                    weeklyCount > 0 && weeklyPnl < 0 && 'border-[#F87171]/20 bg-[#F87171]/5'
-                  )}
-                >
-                  <span className="text-tertiary text-[9px] uppercase tracking-wider font-display font-medium leading-none">
-                    Metrics
-                  </span>
-
-                  {weeklyCount > 0 ? (
-                    <div className="mt-2 flex flex-col items-end w-full">
-                      <span className={cn('num text-xs font-bold leading-tight font-mono', pnlColorClass(weeklyPnl))}>
-                        {formatCalendarPnl(weeklyPnl)}
-                      </span>
-                      
-                      <div className="mt-1 flex flex-col items-end text-[9px] text-tertiary font-mono space-y-0.5 leading-none">
-                        <span className="num">
-                          {weeklyCount} {weeklyCount === 1 ? 'trade' : 'trades'}
-                        </span>
-                        <span className={cn('num font-semibold', weeklyR > 0 ? 'text-gain' : weeklyR < 0 ? 'text-loss' : 'text-tertiary')}>
-                          {weeklyR > 0 ? '+' : ''}
-                          {weeklyR.toFixed(1)}R
-                        </span>
-                      </div>
-                    </div>
-                  ) : (
-                    <span className="num text-tertiary text-xs font-mono">—</span>
-                  )}
-                </div>
+      {/* Grid Layout (Scrollable on small viewports, full width on md+) */}
+      <div className="w-full overflow-x-auto pb-2 no-scrollbar">
+        <div className="min-w-[640px] md:min-w-full">
+          {/* Column Headers */}
+          <div className="grid grid-cols-8 gap-1.5 mb-2 border-b border-hairline/60 pb-2">
+            {WEEKDAYS.map((day) => (
+              <div
+                key={day}
+                className="text-tertiary text-center text-[10px] uppercase tracking-wider font-display"
+              >
+                {day}
               </div>
-            );
-          })}
+            ))}
+            <div className="text-accent-signal text-center text-[10px] uppercase tracking-wider font-display">
+              Weekly
+            </div>
+          </div>
+
+          {/* Calendar Rows */}
+          <div className="space-y-1.5">
+            {grid.map((week, wIndex) => {
+              // Compute weekly summary metrics
+              let weeklyPnl = 0;
+              let weeklyR = 0;
+              let weeklyCount = 0;
+
+              for (const day of week) {
+                const summary = dailyData.get(day.dateKey);
+                if (summary) {
+                  weeklyPnl += summary.pnl;
+                  weeklyR += summary.rMultiple;
+                  weeklyCount += summary.count;
+                }
+              }
+
+              return (
+                <div key={`week-${wIndex}`} className="grid grid-cols-8 gap-1.5">
+                  {/* 7 Days of the Week */}
+                  {week.map((day) => {
+                    const summary = dailyData.get(day.dateKey);
+                    const hasTrades = summary && summary.count > 0;
+                    
+                    // Color codes following DESIGN_SYSTEM.md guidelines
+                    let cellBgClass = 'bg-base/30 border-hairline';
+                    let pnlColor = 'text-primary';
+
+                    if (hasTrades) {
+                      if (summary.pnl > 0) {
+                        cellBgClass = 'bg-[#34D399]/5 border-[#34D399]/20 hover:bg-[#34D399]/10';
+                        pnlColor = 'text-gain';
+                      } else if (summary.pnl < 0) {
+                        cellBgClass = 'bg-[#F87171]/5 border-[#F87171]/20 hover:bg-[#F87171]/10';
+                        pnlColor = 'text-loss';
+                      } else {
+                        // Neutral / Scratch days (profit == 0 but trades taken)
+                        cellBgClass = 'bg-[#4FD1C5]/5 border-[#4FD1C5]/20 hover:bg-[#4FD1C5]/10';
+                        pnlColor = 'text-accent-signal';
+                      }
+                    }
+
+                    return (
+                      <div
+                        key={day.dateKey}
+                        onClick={() => hasTrades && setSelectedDateKey(day.dateKey)}
+                        className={cn(
+                          'relative flex min-h-[84px] flex-col justify-between border rounded-card p-2 transition-colors duration-150',
+                          cellBgClass,
+                          !day.isCurrentMonth && 'opacity-30',
+                          hasTrades && 'cursor-pointer hover:border-accent-signal/40'
+                        )}
+                      >
+                        {/* Day Number Label */}
+                        <span className="text-secondary text-[10px] font-mono leading-none align-top">
+                          {day.dayNumber}
+                        </span>
+
+                        {/* Day Stats (only visible if trades were executed) */}
+                        {hasTrades ? (
+                          <div className="mt-1 flex flex-col items-end w-full">
+                            {/* Daily PnL */}
+                            <span className={cn('num text-xs font-bold leading-tight font-mono', pnlColorClass(summary.pnl))}>
+                              {formatCalendarPnl(summary.pnl)}
+                            </span>
+                            
+                            {/* Trades count and realized R */}
+                            <div className="mt-1 flex flex-col items-end text-[9px] text-tertiary font-mono space-y-0.5 leading-none">
+                              <span className="num">
+                                {summary.count} {summary.count === 1 ? 'trade' : 'trades'}
+                              </span>
+                              <span className={cn('num font-medium', summary.rMultiple > 0 ? 'text-gain' : summary.rMultiple < 0 ? 'text-loss' : 'text-tertiary')}>
+                                {summary.rMultiple > 0 ? '+' : ''}
+                                {summary.rMultiple.toFixed(1)}R
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="h-8" /> /* Spacing placeholder */
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {/* 8th Column: Weekly Metrics Summary */}
+                  <div
+                    className={cn(
+                      'border-hairline bg-base flex min-h-[84px] flex-col justify-between rounded-card border p-2 text-right',
+                      weeklyCount > 0 && weeklyPnl > 0 && 'border-[#34D399]/20 bg-[#34D399]/5',
+                      weeklyCount > 0 && weeklyPnl < 0 && 'border-[#F87171]/20 bg-[#F87171]/5'
+                    )}
+                  >
+                    <span className="text-tertiary text-[9px] uppercase tracking-wider font-display font-medium leading-none">
+                      Metrics
+                    </span>
+
+                    {weeklyCount > 0 ? (
+                      <div className="mt-2 flex flex-col items-end w-full">
+                        <span className={cn('num text-xs font-bold leading-tight font-mono', pnlColorClass(weeklyPnl))}>
+                          {formatCalendarPnl(weeklyPnl)}
+                        </span>
+                        
+                        <div className="mt-1 flex flex-col items-end text-[9px] text-tertiary font-mono space-y-0.5 leading-none">
+                          <span className="num">
+                            {weeklyCount} {weeklyCount === 1 ? 'trade' : 'trades'}
+                          </span>
+                          <span className={cn('num font-semibold', weeklyR > 0 ? 'text-gain' : weeklyR < 0 ? 'text-loss' : 'text-tertiary')}>
+                            {weeklyR > 0 ? '+' : ''}
+                            {weeklyR.toFixed(1)}R
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="num text-tertiary text-xs font-mono">—</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 

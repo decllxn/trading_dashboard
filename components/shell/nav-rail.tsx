@@ -14,6 +14,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useCopilot } from '@/components/copilot/copilot-provider';
 
 interface NavItem {
   label: string;
@@ -74,57 +75,104 @@ const NAV_ITEMS: NavItem[] = [
   },
 ];
 
-import { useCopilot } from '@/components/copilot/copilot-provider';
+// Key primary items for mobile bottom bar (5 main tabs)
+const MOBILE_NAV_ITEMS: NavItem[] = [
+  NAV_ITEMS[0], // Dashboard
+  NAV_ITEMS[1], // Trades
+  NAV_ITEMS[2], // Journal
+  NAV_ITEMS[3], // Simulations
+  NAV_ITEMS[4], // Copilot
+  NAV_ITEMS[7], // Settings
+];
 
 export function NavRail() {
   const pathname = usePathname();
   const { loading } = useCopilot();
 
   return (
-    <nav className="border-hairline bg-surface z-40 flex w-16 shrink-0 flex-col items-center gap-2 border-r py-4">
-      {NAV_ITEMS.map((item) => {
-        const active = item.match(pathname);
-        const Icon = item.icon;
-        const isCopilot = item.label === 'Copilot';
-        const isCopilotLoading = isCopilot && loading;
+    <>
+      {/* Desktop 64px Icon Rail (hidden on mobile) */}
+      <nav className="border-hairline bg-surface z-40 hidden md:flex w-16 shrink-0 flex-col items-center gap-2 border-r py-4">
+        {NAV_ITEMS.map((item) => {
+          const active = item.match(pathname);
+          const Icon = item.icon;
+          const isCopilot = item.label === 'Copilot';
+          const isCopilotLoading = isCopilot && loading;
 
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            aria-label={item.label}
-            aria-current={active ? 'page' : undefined}
-            className={cn(
-              'group relative flex h-10 w-10 items-center justify-center rounded-card transition-colors duration-150',
-              active
-                ? 'text-accent-signal'
-                : 'text-tertiary hover:text-primary',
-            )}
-          >
-            {/* Active indicator: 2px accent-signal bar on the left edge. */}
-            {active ? (
-              <span className="bg-accent-signal absolute left-0 top-1/2 h-6 w-0.5 -translate-y-1/2 rounded-r" />
-            ) : null}
-            
-            <Icon 
-              size={18} 
-              strokeWidth={1.75} 
-              className={cn(isCopilotLoading && 'animate-pulse text-accent-signal')}
-            />
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-label={item.label}
+              aria-current={active ? 'page' : undefined}
+              className={cn(
+                'group relative flex h-11 w-11 items-center justify-center rounded-card transition-colors duration-150',
+                active
+                  ? 'text-accent-signal'
+                  : 'text-tertiary hover:text-primary',
+              )}
+            >
+              {/* Active indicator: 2px accent-signal bar on the left edge. */}
+              {active ? (
+                <span className="bg-accent-signal absolute left-0 top-1/2 h-6 w-0.5 -translate-y-1/2 rounded-r" />
+              ) : null}
 
-            {/* Background thinking ping dot */}
-            {isCopilotLoading && (
-              <span className="absolute top-2 right-2 h-1.5 w-1.5 rounded-full bg-accent-signal animate-ping" />
-            )}
+              <Icon
+                size={19}
+                strokeWidth={1.75}
+                className={cn(isCopilotLoading && 'animate-pulse text-accent-signal')}
+              />
 
-            {/* Label-on-hover tooltip. */}
-            <span className="border-hairline bg-surface-raised text-secondary pointer-events-none absolute left-full z-50 ml-2 hidden whitespace-nowrap rounded-card border px-2 py-1 text-xs group-hover:block">
-              {item.label}
-            </span>
-          </Link>
-        );
-      })}
-    </nav>
+              {/* Background thinking ping dot */}
+              {isCopilotLoading && (
+                <span className="absolute top-2 right-2 h-1.5 w-1.5 rounded-full bg-accent-signal animate-ping" />
+              )}
+
+              {/* Label-on-hover tooltip. */}
+              <span className="border-hairline bg-surface-raised text-secondary pointer-events-none absolute left-full z-50 ml-2 hidden whitespace-nowrap rounded-card border px-2 py-1 text-xs group-hover:block">
+                {item.label}
+              </span>
+            </Link>
+          );
+        })}
+      </nav>
+
+      {/* Mobile Bottom Nav Bar (visible on < 768px) */}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 flex md:hidden h-14 items-center justify-around border-t border-hairline bg-surface px-1 backdrop-blur-md">
+        {MOBILE_NAV_ITEMS.map((item) => {
+          const active = item.match(pathname);
+          const Icon = item.icon;
+          const isCopilot = item.label === 'Copilot';
+          const isCopilotLoading = isCopilot && loading;
+
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-label={item.label}
+              aria-current={active ? 'page' : undefined}
+              className={cn(
+                'relative flex min-h-[44px] min-w-[44px] flex-col items-center justify-center rounded-card py-1 transition-colors duration-150',
+                active ? 'text-accent-signal font-medium' : 'text-tertiary hover:text-primary',
+              )}
+            >
+              <Icon
+                size={18}
+                strokeWidth={1.75}
+                className={cn(isCopilotLoading && 'animate-pulse text-accent-signal')}
+              />
+              <span className="mt-0.5 text-[9px] font-sans tracking-tight">
+                {item.label}
+              </span>
+
+              {/* Mobile Active indicator bar on top */}
+              {active ? (
+                <span className="bg-accent-signal absolute top-0 left-1/2 h-0.5 w-6 -translate-x-1/2 rounded-b" />
+              ) : null}
+            </Link>
+          );
+        })}
+      </nav>
+    </>
   );
 }
-

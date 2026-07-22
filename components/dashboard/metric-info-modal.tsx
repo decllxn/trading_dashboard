@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import type { MetricKey } from './metric-definitions';
 import { getMetricDefinition } from './metric-definitions';
+import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 
 interface MetricInfoModalProps {
   metricKey: MetricKey | null;
@@ -25,6 +26,7 @@ interface MetricInfoModalProps {
  * whitespace so multi-line formulas and examples align correctly.
  */
 export function MetricInfoModal({ metricKey, onClose }: MetricInfoModalProps) {
+  useBodyScrollLock(metricKey !== null);
   const definition = metricKey ? getMetricDefinition(metricKey) : undefined;
 
   return (

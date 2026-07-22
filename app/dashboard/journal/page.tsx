@@ -56,7 +56,7 @@ export default async function JournalPage() {
   });
 
   return (
-    <main className="flex h-full flex-col bg-base overflow-hidden p-4 sm:p-6">
+    <main className="flex min-h-full h-auto lg:h-full flex-col bg-base overflow-y-auto lg:overflow-hidden p-4 sm:p-6">
       <JournalClient 
         entries={entries || []} 
         trades={mappedTrades} 
