@@ -179,14 +179,17 @@ export default function CopilotPage() {
     }
   };
 
-  const sidebarContent = (
+  const renderSidebarContent = (onMobileItemClick?: () => void) => (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between mb-4">
         <span className="font-display text-primary text-[10px] uppercase tracking-wider font-bold">
           Chat History
         </span>
         <button
-          onClick={handleNewChat}
+          onClick={() => {
+            handleNewChat();
+            if (onMobileItemClick) onMobileItemClick();
+          }}
           className="border-hairline bg-base hover:text-accent-signal text-secondary flex h-7 w-7 items-center justify-center rounded-card border transition-colors cursor-pointer"
           title="New Chat"
         >
@@ -203,7 +206,10 @@ export default function CopilotPage() {
             return (
               <div
                 key={s.id}
-                onClick={() => handleSelectSession(s.id)}
+                onClick={() => {
+                  handleSelectSession(s.id);
+                  if (onMobileItemClick) onMobileItemClick();
+                }}
                 className={cn(
                   'group flex items-center justify-between px-3 py-2.5 rounded-card border text-xs cursor-pointer transition-colors duration-150',
                   isActive
@@ -239,13 +245,19 @@ export default function CopilotPage() {
     <main className="flex h-full flex-row bg-base overflow-hidden">
       {/* 1. Desktop Sidebar */}
       <aside className="hidden lg:flex w-72 shrink-0 border-r border-hairline bg-surface p-4 flex-col h-full">
-        {sidebarContent}
+        {renderSidebarContent()}
       </aside>
 
       {/* 2. Mobile Sidebar Slide-over */}
       {sidebarOpen && (
-        <div className="fixed inset-0 z-50 flex lg:hidden bg-base/80 backdrop-blur-sm">
-          <div className="w-72 border-r border-hairline bg-surface flex flex-col h-full p-4 relative">
+        <div
+          className="fixed inset-0 z-50 flex lg:hidden bg-base/80 backdrop-blur-sm transition-opacity"
+          onClick={() => setSidebarOpen(false)}
+        >
+          <div
+            className="w-72 border-r border-hairline bg-surface flex flex-col h-full p-4 relative shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             <button
               onClick={() => setSidebarOpen(false)}
               aria-label="Close history drawer"
@@ -254,7 +266,7 @@ export default function CopilotPage() {
               <X size={16} />
             </button>
             <div className="mt-8 flex-1 h-full overflow-hidden">
-              {sidebarContent}
+              {renderSidebarContent(() => setSidebarOpen(false))}
             </div>
           </div>
         </div>

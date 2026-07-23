@@ -55,7 +55,7 @@ export default async function TradesPage() {
   // any failure there returns the WHOLE trades query as an error with null
   // data — which silently hid every trade (the bug this fixed). Flat queries
   // mean a tag/link problem can never obscure the trades themselves.
-  const [
+  let [
     { data: rawTrades, error: tradesError },
     { data: rawTags },
     { data: rawTradeTags },
@@ -63,7 +63,7 @@ export default async function TradesPage() {
     supabase
       .from('trades')
       .select(
-        'id, instrument, asset_class, direction, entry_price, exit_price, size, stop_price, target_price, entry_time, exit_time, pnl, commission, swap, fees, r_multiple, status, daily_pd_array, one_hour_pd_array, thirty_minute_pd_array, images',
+        'id, instrument, asset_class, direction, entry_price, exit_price, size, stop_price, target_price, entry_time, exit_time, pnl, commission, swap, fees, r_multiple, status, daily_pd_array, one_hour_pd_array, thirty_minute_pd_array, images, pretrade_checklist',
       )
       .eq('user_id', user.id)
       .order('entry_time', { ascending: false, nullsFirst: false }),
@@ -76,6 +76,20 @@ export default async function TradesPage() {
       .from('trade_tags')
       .select('trade_id, tag_id'),
   ]);
+
+  // If pretrade_checklist column is missing in Supabase DB, fallback to selecting without it
+  if (tradesError && tradesError.message?.includes('pretrade_checklist')) {
+    const retry = await supabase
+      .from('trades')
+      .select(
+        'id, instrument, asset_class, direction, entry_price, exit_price, size, stop_price, target_price, entry_time, exit_time, pnl, commission, swap, fees, r_multiple, status, daily_pd_array, one_hour_pd_array, thirty_minute_pd_array, images',
+      )
+      .eq('user_id', user.id)
+      .order('entry_time', { ascending: false, nullsFirst: false });
+
+    rawTrades = retry.data as any;
+    tradesError = retry.error;
+  }
 
   // Surface the query error instead of swallowing it. If the trades query
   // failed, the previous code rendered "No trades logged" — misleading. Show
@@ -145,6 +159,7 @@ export default async function TradesPage() {
         oneHourPdArray: t.one_hour_pd_array,
         thirtyMinutePdArray: t.thirty_minute_pd_array,
         images: t.images || [],
+        pretradeChecklist: (t as any).pretrade_checklist || [],
         entryTime: t.entry_time,
         tags: (tagIdsByTradeId.get(t.id) ?? [])
           .map((tagId) => tagNameById.get(tagId))

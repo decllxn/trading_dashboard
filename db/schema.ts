@@ -148,6 +148,7 @@ export const trades = pgTable('trades', {
   oneHourPdArray: text('one_hour_pd_array'),
   thirtyMinutePdArray: text('thirty_minute_pd_array'),
   images: jsonb('images').$type<string[]>().default([]),
+  pretradeChecklist: jsonb('pretrade_checklist').$type<{ id: string; text: string; category: string; checked: boolean }[]>().default([]),
 
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
@@ -401,6 +402,9 @@ export const userSettings = pgTable('user_settings', {
   // (and accounts created before this column) fall back to the app default
   // (STARTING_BALANCE_DEFAULT in lib/stats.ts) rather than forcing a value.
   startingBalance: numeric('starting_balance', { precision: 20, scale: 8 }),
+  // Break Even threshold magnitude in account currency (e.g. $5.00). Trades with
+  // |P&L| <= breakeven_threshold are categorized as Break Even rather than Win/Loss.
+  breakevenThreshold: numeric('breakeven_threshold', { precision: 20, scale: 8 }),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),

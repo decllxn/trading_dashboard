@@ -104,6 +104,62 @@ export async function saveStartingBalance(
   return { success: true };
 }
 
+export interface BreakevenThresholdState {
+  error?: string;
+  success?: boolean;
+}
+
+/**
+ * Upsert the user's break even threshold into user_settings. Trades with
+ * |P&L| <= threshold are categorized as Break Even. Empty input reverts to the
+ * app default ($5.00).
+ */
+export async function saveBreakevenThreshold(
+  _prev: BreakevenThresholdState,
+  formData: FormData,
+): Promise<BreakevenThresholdState> {
+  const supabase = createServerClient();
+  if (!supabase) redirect('/login');
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+
+  const raw = (formData.get('breakevenThreshold') as string | null)?.trim() ?? '';
+
+  let storedValue: number | null;
+  if (raw === '') {
+    storedValue = null;
+  } else {
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      return { error: 'Enter a valid non-negative amount.' };
+    }
+    storedValue = parsed;
+  }
+
+  const { error } = await supabase
+    .from('user_settings')
+    .upsert(
+      {
+        user_id: user.id,
+        breakeven_threshold: storedValue === null ? null : String(storedValue),
+      },
+      { onConflict: 'user_id' },
+    );
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath('/dashboard');
+  revalidatePath('/dashboard/settings');
+  revalidatePath('/dashboard/trades');
+
+  return { success: true };
+}
+
 export async function connectMt5Broker(
   brokerName: string,
   accountRef: string,

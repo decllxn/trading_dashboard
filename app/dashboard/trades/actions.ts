@@ -386,6 +386,7 @@ export async function createLiveTrade(data: {
   stopPrice: number | null;
   targetPrice: number | null;
   size: number;
+  checklist?: { id: string; text: string; category: string; checked: boolean }[];
 }): Promise<{ error?: string; success?: boolean }> {
   if (!isSupabaseConfigured()) return { error: 'Supabase is not configured.' };
   const supabase = createServerClient();
@@ -419,6 +420,7 @@ export async function createLiveTrade(data: {
       size: String(data.size),
       entry_time: new Date().toISOString(),
       r_multiple: rMultiple != null ? String(rMultiple) : null,
+      pretrade_checklist: data.checklist || [],
     });
 
   if (error) {
@@ -427,5 +429,32 @@ export async function createLiveTrade(data: {
 
   revalidatePath('/dashboard');
   revalidatePath('/dashboard/trades');
+  return { success: true };
+}
+
+export async function attachChecklistToTrade(
+  tradeId: string,
+  checklist: { id: string; text: string; category: string; checked: boolean }[],
+): Promise<{ error?: string; success?: boolean }> {
+  if (!isSupabaseConfigured()) return { error: 'Supabase is not configured.' };
+  const supabase = createServerClient();
+  if (!supabase) return { error: 'Database client unavailable.' };
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Not authenticated.' };
+
+  const { error } = await supabase
+    .from('trades')
+    .update({ pretrade_checklist: checklist as any })
+    .eq('id', tradeId)
+    .eq('user_id', user.id);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath('/dashboard');
+  revalidatePath('/dashboard/trades');
+  revalidatePath(`/dashboard/trades/${tradeId}`);
   return { success: true };
 }

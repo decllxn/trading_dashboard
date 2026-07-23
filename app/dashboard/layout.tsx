@@ -129,7 +129,7 @@ export default async function DashboardLayout({
   // Persistent app shell: rail + (top bar + signal strip + content).
   return (
     <CopilotProvider>
-      <div className="bg-base flex h-screen overflow-hidden">
+      <div className="bg-base flex h-[100dvh] w-full overflow-hidden">
         <NavRail />
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <div className="z-30 shrink-0">

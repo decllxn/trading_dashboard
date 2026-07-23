@@ -13,6 +13,7 @@ import {
   formatR,
   pnlColorClass,
   rColorClass,
+  tradeResultTag,
   sortTrades,
   calculateTradeRisk,
   formatRisk,
@@ -348,7 +349,15 @@ function TradeTableRow({
       <td className={cn('num px-3 py-2.5 text-right', rColorClass(trade.rMultiple))}>
         {formatR(trade.rMultiple)}
       </td>
-      <td className="text-secondary px-3 py-2.5">{capitalize(trade.status)}</td>
+      <td className="text-secondary px-3 py-2.5">
+        <div className="flex items-center gap-1.5">
+          <span>{capitalize(trade.status)}</span>
+          {trade.status === 'closed' && (() => {
+            const tag = tradeResultTag(trade.pnl);
+            return tag ? <span className={tag.className}>{tag.label}</span> : null;
+          })()}
+        </div>
+      </td>
       <td className="text-secondary px-3 py-2.5 font-mono text-xs">
         {trade.dailyPdArray || <span className="text-tertiary">—</span>}
       </td>

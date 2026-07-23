@@ -1,25 +1,28 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Target, AlertTriangle, Clock, Calendar, CheckSquare, RefreshCw, ShieldAlert, Play } from 'lucide-react';
+import { Target, AlertTriangle, Clock, Calendar, CheckSquare, RefreshCw, ShieldAlert, Play, Link as LinkIcon, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { createLiveTrade } from '@/app/dashboard/trades/actions';
+import { createLiveTrade, attachChecklistToTrade } from '@/app/dashboard/trades/actions';
 
 // We project a simple interface from the parent trades.
-interface ChecklistTrade {
+export interface ChecklistTrade {
   id?: string;
+  instrument?: string | null;
+  direction?: string | null;
   pnl?: number | null;
   rMultiple?: number | null;
   entryTime?: string | null;
   exitTime?: string | null;
   status?: string;
+  pretradeChecklist?: ChecklistItem[];
 }
 
 interface DisciplineChecklistProps {
   trades: ReadonlyArray<ChecklistTrade>;
 }
 
-interface ChecklistItem {
+export interface ChecklistItem {
   id: string;
   category: 'setup' | 'liquidity' | 'caveat';
   text: string;
@@ -47,7 +50,10 @@ export function DisciplineChecklist({ trades }: DisciplineChecklistProps) {
   const [items, setItems] = useState<ChecklistItem[]>([]);
   const [mounted, setMounted] = useState(false);
 
-  // Quick trade entry form state
+  // Target selection: 'new' or trade ID
+  const [selectedTarget, setSelectedTarget] = useState<string>('new');
+
+  // Quick trade entry form state (when target is 'new')
   const [inst, setInst] = useState('');
   const [dir, setDir] = useState<'long' | 'short'>('long');
   const [entryPrice, setEntryPrice] = useState('');
@@ -59,7 +65,7 @@ export function DisciplineChecklist({ trades }: DisciplineChecklistProps) {
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState(false);
 
-  // Load from local storage
+  // Load from local storage or pre-populate from selected existing trade
   useEffect(() => {
     setMounted(true);
     const saved = localStorage.getItem('trading_dashboard_checklist');
@@ -73,6 +79,20 @@ export function DisciplineChecklist({ trades }: DisciplineChecklistProps) {
       setItems(DEFAULT_ITEMS);
     }
   }, []);
+
+  // When target trade changes, load its pretradeChecklist if present
+  const handleTargetChange = (targetId: string) => {
+    setSelectedTarget(targetId);
+    setFormError(null);
+    setFormSuccess(false);
+
+    if (targetId !== 'new') {
+      const selectedTrade = trades.find((t) => t.id === targetId);
+      if (selectedTrade && selectedTrade.pretradeChecklist && selectedTrade.pretradeChecklist.length > 0) {
+        setItems(selectedTrade.pretradeChecklist);
+      }
+    }
+  };
 
   const toggleItem = (id: string) => {
     const updated = items.map((item) =>
@@ -125,15 +145,12 @@ export function DisciplineChecklist({ trades }: DisciplineChecklistProps) {
 
   let activeSession = 'Unknown';
   let isAsiaSession = false;
-  let sessionWarning = '';
 
   if (utcTime) {
     const utcHour = utcTime.getUTCHours();
-    // Asia: 22:00 to 06:00 UTC
     if (utcHour >= 22 || utcHour < 6) {
       activeSession = 'Asia';
       isAsiaSession = true;
-      sessionWarning = 'Asia Session Active. Restriction: Do not trade Asia (London/NY only).';
     } else if (utcHour >= 6 && utcHour < 12) {
       activeSession = 'London';
     } else if (utcHour >= 12 && utcHour < 20) {
@@ -143,55 +160,67 @@ export function DisciplineChecklist({ trades }: DisciplineChecklistProps) {
     }
   }
 
-  // --- No News Monday check ---
   const isMonday = new Date().getDay() === 1;
 
-  const allCleared = items.length > 0 && items.every((i) => i.checked);
+  const clearedCount = items.filter((i) => i.checked).length;
+  const clearedPct = items.length > 0 ? Math.round((clearedCount / items.length) * 100) : 0;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleAttachOrSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!allCleared) return;
-    if (!inst.trim()) {
-      setFormError('Instrument required');
-      return;
-    }
-    const parsedEntry = Number(entryPrice);
-    const parsedSize = Number(size);
-    if (isNaN(parsedEntry) || parsedEntry <= 0) {
-      setFormError('Valid Entry Price required');
-      return;
-    }
-    if (isNaN(parsedSize) || parsedSize <= 0) {
-      setFormError('Valid Size required');
-      return;
-    }
-
     setLoading(true);
     setFormError(null);
     setFormSuccess(false);
 
     try {
-      const res = await createLiveTrade({
-        instrument: inst,
-        direction: dir,
-        entryPrice: parsedEntry,
-        stopPrice: stopPrice ? Number(stopPrice) : null,
-        targetPrice: targetPrice ? Number(targetPrice) : null,
-        size: parsedSize,
-      });
-
-      if (res.error) {
-        setFormError(res.error);
+      if (selectedTarget !== 'new') {
+        // Attach rules directly to an existing taken or closed trade!
+        const res = await attachChecklistToTrade(selectedTarget, items);
+        if (res.error) {
+          setFormError(res.error);
+        } else {
+          setFormSuccess(true);
+        }
       } else {
-        setFormSuccess(true);
-        // Clear form
-        setInst('');
-        setEntryPrice('');
-        setStopPrice('');
-        setTargetPrice('');
-        setSize('');
-        // Reset checklist to encourage new pre-trade check
-        resetChecklist();
+        // Create new live trade with checklist attached (allowed even if not all checked!)
+        if (!inst.trim()) {
+          setFormError('Instrument required');
+          setLoading(false);
+          return;
+        }
+        const parsedEntry = Number(entryPrice);
+        const parsedSize = Number(size);
+        if (isNaN(parsedEntry) || parsedEntry <= 0) {
+          setFormError('Valid Entry Price required');
+          setLoading(false);
+          return;
+        }
+        if (isNaN(parsedSize) || parsedSize <= 0) {
+          setFormError('Valid Size required');
+          setLoading(false);
+          return;
+        }
+
+        const res = await createLiveTrade({
+          instrument: inst,
+          direction: dir,
+          entryPrice: parsedEntry,
+          stopPrice: stopPrice ? Number(stopPrice) : null,
+          targetPrice: targetPrice ? Number(targetPrice) : null,
+          size: parsedSize,
+          checklist: items,
+        });
+
+        if (res.error) {
+          setFormError(res.error);
+        } else {
+          setFormSuccess(true);
+          setInst('');
+          setEntryPrice('');
+          setStopPrice('');
+          setTargetPrice('');
+          setSize('');
+          resetChecklist();
+        }
       }
     } catch (err: any) {
       setFormError(err.message || 'Submission failed');
@@ -201,8 +230,10 @@ export function DisciplineChecklist({ trades }: DisciplineChecklistProps) {
   };
 
   if (!mounted) {
-    return null; // Prevent hydration flash
+    return null;
   }
+
+  const selectedTradeObj = trades.find((t) => t.id === selectedTarget);
 
   return (
     <div className="border-hairline bg-surface rounded-card border w-full p-4 flex flex-col gap-4">
@@ -210,7 +241,7 @@ export function DisciplineChecklist({ trades }: DisciplineChecklistProps) {
         <div className="flex items-center gap-2">
           <Target size={14} className="text-accent-signal" />
           <h2 className="font-display text-primary text-xs uppercase tracking-wide">
-            Pre-Trade & Risk Rules
+            Pre-Trade &amp; Risk Rules
           </h2>
         </div>
         <button
@@ -324,7 +355,7 @@ export function DisciplineChecklist({ trades }: DisciplineChecklistProps) {
         {/* Liquidity Section */}
         <div>
           <span className="text-tertiary text-[9px] uppercase tracking-wider font-display block mb-1.5">
-            2. Liquidity & Confirmation
+            2. Liquidity &amp; Confirmation
           </span>
           <div className="space-y-2">
             {items.filter(i => i.category === 'liquidity').map((item) => (
@@ -349,7 +380,7 @@ export function DisciplineChecklist({ trades }: DisciplineChecklistProps) {
         {/* Caveats Section */}
         <div>
           <span className="text-tertiary text-[9px] uppercase tracking-wider font-display block mb-1.5">
-            3. Risk Caveats & Sessions
+            3. Risk Caveats &amp; Sessions
           </span>
           <div className="space-y-2">
             {items.filter(i => i.category === 'caveat').map((item) => (
@@ -375,161 +406,185 @@ export function DisciplineChecklist({ trades }: DisciplineChecklistProps) {
       {/* METRIC READOUT / SESSION INDICATOR */}
       <div className="border-t border-hairline/60 pt-3 flex items-center justify-between text-[9px] text-tertiary font-display">
         <span>Active Session: <span className="text-accent-signal uppercase tracking-wider">{activeSession}</span></span>
-        <span className={cn("font-semibold", allCleared ? "text-gain" : "text-accent-alert")}>
-          {items.filter(i => i.checked).length} / {items.length} CLEARED
+        <span className={cn("font-semibold", clearedCount > 0 ? "text-gain" : "text-tertiary")}>
+          {clearedCount} / {items.length} CLEARED ({clearedPct}%)
         </span>
       </div>
 
-      {/* QUICK POSITION LOGGING */}
-      <div className="border-t border-hairline/60 pt-4 mt-2">
-        <div className="flex items-center gap-2 mb-3">
-          <Play size={12} className={cn(allCleared ? "text-accent-signal" : "text-tertiary")} />
-          <h3 className="font-display text-primary text-xs uppercase tracking-wide">
-            Log Live Position
-          </h3>
+      {/* ATTACHMENT TARGET SELECTOR & FORM */}
+      <div className="border-t border-hairline/60 pt-4 mt-2 space-y-3">
+        <div>
+          <label className="text-tertiary text-[9px] uppercase tracking-wider font-display block mb-1">
+            Attach Rules To:
+          </label>
+          <select
+            value={selectedTarget}
+            onChange={(e) => handleTargetChange(e.target.value)}
+            className="w-full bg-surface-raised border border-hairline focus:border-accent-signal/80 rounded px-2.5 py-1.5 text-xs text-primary outline-none transition-colors"
+          >
+            <option value="new">+ Create New Position Entry</option>
+            {trades.map((t) => (
+              <option key={t.id} value={t.id}>
+                [{t.status?.toUpperCase()}] {t.instrument} {t.direction?.toUpperCase()} {t.pnl != null ? `(${t.pnl >= 0 ? '+' : ''}$${t.pnl.toFixed(2)})` : ''}
+              </option>
+            ))}
+          </select>
         </div>
 
-        {!allCleared ? (
-          <div className="border-hairline bg-[#14171C]/50 rounded-card border px-3 py-4 text-center">
-            <p className="text-tertiary text-[10px] leading-relaxed">
-              Complete the pre-trade checklist above to unlock quick position entry.
+        <form onSubmit={handleAttachOrSubmit} className="space-y-3">
+          {formError && (
+            <p className="text-loss text-[10px] bg-loss/5 border border-loss/20 px-2 py-1 rounded-card num">
+              {formError}
             </p>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-3">
-            {formError && (
-              <p className="text-loss text-[10px] bg-loss/5 border border-loss/20 px-2 py-1 rounded-card num">
-                {formError}
-              </p>
-            )}
-            {formSuccess && (
-              <p className="text-gain text-[10px] bg-gain/5 border border-gain/20 px-2 py-1 rounded-card">
-                Position logged! Checklist reset for next execution.
-              </p>
-            )}
+          )}
+          {formSuccess && (
+            <p className="text-gain text-[10px] bg-gain/5 border border-gain/20 px-2 py-1 rounded-card">
+              {selectedTarget === 'new'
+                ? `Position logged with ${clearedCount}/${items.length} rules attached!`
+                : `Pre-trade rules successfully attached to ${selectedTradeObj?.instrument || 'trade'}!`}
+            </p>
+          )}
 
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-tertiary text-[9px] uppercase tracking-wider block mb-1">
-                  Instrument
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={inst}
-                  onChange={(e) => setInst(e.target.value)}
-                  placeholder="USDCAD"
-                  className="w-full bg-surface-raised border border-hairline text-primary text-xs rounded-card py-1.5 px-2 focus:outline-none focus:border-accent-signal focus:ring-0 uppercase placeholder-tertiary"
-                />
-              </div>
+          {selectedTarget === 'new' ? (
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-tertiary text-[9px] uppercase tracking-wider block mb-1">
+                    Instrument
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={inst}
+                    onChange={(e) => setInst(e.target.value)}
+                    placeholder="USDCAD"
+                    className="w-full bg-surface-raised border border-hairline text-primary text-xs rounded-card py-1.5 px-2 focus:outline-none focus:border-accent-signal focus:ring-0 uppercase placeholder-tertiary"
+                  />
+                </div>
 
-              <div>
-                <label className="text-tertiary text-[9px] uppercase tracking-wider block mb-1">
-                  Direction
-                </label>
-                <div className="grid grid-cols-2 border border-hairline rounded-card overflow-hidden bg-surface-raised h-[28px] items-center">
-                  <button
-                    type="button"
-                    onClick={() => setDir('long')}
-                    className={cn(
-                      "text-[10px] font-semibold h-full transition-colors",
-                      dir === 'long' ? "bg-accent-signal text-[#0B0D10]" : "text-secondary hover:text-primary"
-                    )}
-                  >
-                    LONG
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDir('short')}
-                    className={cn(
-                      "text-[10px] font-semibold h-full transition-colors",
-                      dir === 'short' ? "bg-accent-signal text-[#0B0D10]" : "text-secondary hover:text-primary"
-                    )}
-                  >
-                    SHORT
-                  </button>
+                <div>
+                  <label className="text-tertiary text-[9px] uppercase tracking-wider block mb-1">
+                    Direction
+                  </label>
+                  <div className="grid grid-cols-2 border border-hairline rounded-card overflow-hidden bg-surface-raised h-[28px] items-center">
+                    <button
+                      type="button"
+                      onClick={() => setDir('long')}
+                      className={cn(
+                        "text-[10px] font-semibold h-full transition-colors",
+                        dir === 'long' ? "bg-accent-signal text-[#0B0D10]" : "text-secondary hover:text-primary"
+                      )}
+                    >
+                      LONG
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDir('short')}
+                      className={cn(
+                        "text-[10px] font-semibold h-full transition-colors",
+                        dir === 'short' ? "bg-accent-signal text-[#0B0D10]" : "text-secondary hover:text-primary"
+                      )}
+                    >
+                      SHORT
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-tertiary text-[9px] uppercase tracking-wider block mb-1">
-                  Entry Price
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  required
-                  value={entryPrice}
-                  onChange={(e) => setEntryPrice(e.target.value)}
-                  placeholder="1.3542"
-                  className="w-full bg-surface-raised border border-hairline text-primary font-mono text-xs rounded-card py-1.5 px-2 focus:outline-none focus:border-accent-signal focus:ring-0 placeholder-tertiary"
-                />
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-tertiary text-[9px] uppercase tracking-wider block mb-1">
+                    Entry Price
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    value={entryPrice}
+                    onChange={(e) => setEntryPrice(e.target.value)}
+                    placeholder="1.3542"
+                    className="w-full bg-surface-raised border border-hairline text-primary font-mono text-xs rounded-card py-1.5 px-2 focus:outline-none focus:border-accent-signal focus:ring-0 placeholder-tertiary"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-tertiary text-[9px] uppercase tracking-wider block mb-1">
+                    Size (Lots/Units)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    value={size}
+                    onChange={(e) => setSize(e.target.value)}
+                    placeholder="1.50"
+                    className="w-full bg-surface-raised border border-hairline text-primary font-mono text-xs rounded-card py-1.5 px-2 focus:outline-none focus:border-accent-signal focus:ring-0 placeholder-tertiary"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="text-tertiary text-[9px] uppercase tracking-wider block mb-1">
-                  Size (Lots/Units)
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  required
-                  value={size}
-                  onChange={(e) => setSize(e.target.value)}
-                  placeholder="1.50"
-                  className="w-full bg-surface-raised border border-hairline text-primary font-mono text-xs rounded-card py-1.5 px-2 focus:outline-none focus:border-accent-signal focus:ring-0 placeholder-tertiary"
-                />
-              </div>
-            </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-tertiary text-[9px] uppercase tracking-wider block mb-1">
+                    Stop Loss
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={stopPrice}
+                    onChange={(e) => setStopPrice(e.target.value)}
+                    placeholder="1.3522"
+                    className="w-full bg-surface-raised border border-hairline text-primary font-mono text-xs rounded-card py-1.5 px-2 focus:outline-none focus:border-accent-signal focus:ring-0 placeholder-tertiary"
+                  />
+                </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-tertiary text-[9px] uppercase tracking-wider block mb-1">
-                  Stop Loss
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  value={stopPrice}
-                  onChange={(e) => setStopPrice(e.target.value)}
-                  placeholder="1.3522"
-                  className="w-full bg-surface-raised border border-hairline text-primary font-mono text-xs rounded-card py-1.5 px-2 focus:outline-none focus:border-accent-signal focus:ring-0 placeholder-tertiary"
-                />
+                <div>
+                  <label className="text-tertiary text-[9px] uppercase tracking-wider block mb-1">
+                    Take Profit
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={targetPrice}
+                    onChange={(e) => setTargetPrice(e.target.value)}
+                    placeholder="1.3592"
+                    className="w-full bg-surface-raised border border-hairline text-primary font-mono text-xs rounded-card py-1.5 px-2 focus:outline-none focus:border-accent-signal focus:ring-0 placeholder-tertiary"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="text-tertiary text-[9px] uppercase tracking-wider block mb-1">
-                  Take Profit
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  value={targetPrice}
-                  onChange={(e) => setTargetPrice(e.target.value)}
-                  placeholder="1.3592"
-                  className="w-full bg-surface-raised border border-hairline text-primary font-mono text-xs rounded-card py-1.5 px-2 focus:outline-none focus:border-accent-signal focus:ring-0 placeholder-tertiary"
-                />
-              </div>
-            </div>
-
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-accent-signal hover:bg-accent-signal/90 text-[#0B0D10] text-xs font-semibold py-2 rounded-card transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed uppercase"
+              >
+                {loading ? (
+                  <>
+                    <span className="w-3 h-3 rounded-full border-2 border-[#0B0D10]/20 border-t-[#0B0D10] animate-spin" />
+                    LOGGING ENTRY...
+                  </>
+                ) : (
+                  `LOG POSITION (${clearedCount}/${items.length} RULES ATTACHED)`
+                )}
+              </button>
+            </>
+          ) : (
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-accent-signal hover:bg-accent-signal/90 text-[#0B0D10] text-xs font-semibold py-2 rounded-card transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-accent-signal hover:bg-accent-signal/90 text-[#0B0D10] text-xs font-semibold py-2 rounded-card transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed uppercase"
             >
               {loading ? (
                 <>
                   <span className="w-3 h-3 rounded-full border-2 border-[#0B0D10]/20 border-t-[#0B0D10] animate-spin" />
-                  LOGGING ENTRY...
+                  ATTACHING RULES...
                 </>
               ) : (
-                'EXECUTE & LOG LIVE TRADE'
+                `ATTACH RULES TO ${selectedTradeObj?.instrument || 'TRADE'} (${clearedCount}/${items.length} CLEARED)`
               )}
             </button>
-          </form>
-        )}
+          )}
+        </form>
       </div>
     </div>
   );

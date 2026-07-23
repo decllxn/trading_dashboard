@@ -27,12 +27,13 @@ export type MetricKey =
 export const METRIC_DEFINITIONS: MetricDefinition[] = [
   {
     key: 'winRate',
-    name: 'Win Rate',
+    name: 'Win Rate & Break Even Statistics',
     definition:
-      'The proportion of closed trades that ended with a positive P&L. A win rate above 50% means more trades win than lose, but it says nothing about the size of those wins and losses.',
-    formula: 'Win Rate = Winning Trades / Total Closed Trades',
+      'The proportion of closed trades that resulted in a win. Trades with small P&L within your Break Even threshold (e.g. ±$5.00) are classified as Break Even trades rather than distorting your win/loss stats as fake wins or losses.',
+    formula:
+      'Standard Win Rate = Wins / Total Closed Trades\nAdjusted Win Rate = Wins / (Wins + Losses)   [Excludes Break Evens]',
     example:
-      'You close 20 trades. 13 are profitable, 7 are not.\nWin Rate = 13 / 20 = 0.65 = 65.0%',
+      'Out of 20 closed trades: 12 Wins, 5 Losses, and 3 Break Evens (e.g. −$2.99, +$0.01).\n• Standard Win Rate = 12 / 20 = 60.0%\n• Adjusted Win Rate = 12 / (12 + 5) = 12 / 17 = 70.6%\n• Breakdown: 60% Wins, 25% Losses, 15% Break Evens',
   },
   {
     key: 'expectancy',

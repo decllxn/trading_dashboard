@@ -68,11 +68,27 @@
 @layer base {
   html,
   body {
-    height: 100vh;
+    height: 100%;
+    min-height: 100dvh;
+    height: 100dvh;
+    width: 100%;
     overflow: hidden;
     margin: 0;
     padding: 0;
+    -webkit-tap-highlight-color: transparent;
     @apply bg-base text-primary font-sans;
+  }
+
+  /* Prevent iOS Safari viewport auto-zoom shift on input focus */
+  @media (max-width: 640px) {
+    input[type='text'],
+    input[type='number'],
+    input[type='email'],
+    input[type='password'],
+    textarea,
+    select {
+      font-size: 16px !important;
+    }
   }
 
   /*

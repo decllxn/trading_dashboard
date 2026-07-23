@@ -133,11 +133,11 @@ export const TAG_CATEGORY_ORDER: ReadonlyArray<{ value: TagCategory; label: stri
 ];
 
 /** P&L color token based on sign — use with text-gain / text-loss per DS. */
-export function pnlColorClass(value: number | null): string {
+export function pnlColorClass(value: number | null, threshold: number = 5.0): string {
   if (value == null) return 'text-secondary';
-  if (value > 0) return 'text-gain';
-  if (value < 0) return 'text-loss';
-  return 'text-secondary';
+  if (Math.abs(value) <= threshold) return 'text-secondary';
+  if (value > threshold) return 'text-gain';
+  return 'text-loss';
 }
 
 /** R-multiple color token: gains green, losses red, neutral otherwise. */
@@ -146,6 +146,30 @@ export function rColorClass(value: number | null): string {
   if (value > 0) return 'text-gain';
   if (value < 0) return 'text-loss';
   return 'text-secondary';
+}
+
+/** Returns a visual outcome badge (WIN, LOSS, BE) for a trade given a P&L threshold. */
+export function tradeResultTag(
+  pnl: number | null,
+  threshold: number = 5.0,
+): { label: string; className: string } | null {
+  if (pnl == null) return null;
+  if (Math.abs(pnl) <= threshold) {
+    return {
+      label: 'BE',
+      className: 'bg-surface-raised border border-hairline text-tertiary font-mono font-medium px-1.5 py-0.5 rounded text-[10px]',
+    };
+  }
+  if (pnl > threshold) {
+    return {
+      label: 'WIN',
+      className: 'bg-gain/10 border border-gain/30 text-gain font-mono font-medium px-1.5 py-0.5 rounded text-[10px]',
+    };
+  }
+  return {
+    label: 'LOSS',
+    className: 'bg-loss/10 border border-loss/30 text-loss font-mono font-medium px-1.5 py-0.5 rounded text-[10px]',
+  };
 }
 
 // =============================================================================
@@ -195,6 +219,8 @@ export interface TradeRow {
   exitTime: string | null;
   /** ISO string; the row is sorted on this by default. Null sorts last. */
   entryTime: string | null;
+  /** Pre-trade and risk checklist items attached to this trade. */
+  pretradeChecklist?: Array<{ id: string; text: string; category: string; checked: boolean }>;
   /** Resolved tag names for this trade, alphabetized by name. */
   tags: ReadonlyArray<TradeRowTag>;
 }

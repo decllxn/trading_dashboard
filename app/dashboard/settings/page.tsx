@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation';
 import { StartingBalanceForm } from './starting-balance-form';
+import { BreakevenThresholdForm } from './breakeven-threshold-form';
 import { createServerClient } from '@/lib/supabase';
-import { resolveStartingBalance } from '@/lib/stats';
+import { resolveStartingBalance, resolveBreakevenThreshold } from '@/lib/stats';
 import { ConnectBrokerModal } from '@/components/settings/connect-broker-modal';
 import { PurgeDetailsButton } from '@/components/settings/purge-details-button';
 
@@ -65,12 +66,17 @@ export default async function SettingsPage({
   const { data: settingsRow } = supabase
     ? await supabase
         .from('user_settings')
-        .select('starting_balance')
+        .select('starting_balance, breakeven_threshold')
         .maybeSingle()
     : { data: null };
   const startingBalanceValue = String(
     resolveStartingBalance(
       (settingsRow as { starting_balance: string | null } | null)?.starting_balance ?? null,
+    ),
+  );
+  const breakevenThresholdValue = String(
+    resolveBreakevenThreshold(
+      (settingsRow as { breakeven_threshold: string | null } | null)?.breakeven_threshold ?? null,
     ),
   );
   const brokerMessage = searchParams.broker
@@ -174,6 +180,20 @@ export default async function SettingsPage({
         </div>
         <div className="p-5">
           <StartingBalanceForm defaultValue={startingBalanceValue} />
+        </div>
+      </section>
+
+      <section className="mt-6 rounded-card border border-hairline bg-surface">
+        <div className="border-b border-hairline p-5">
+          <h2 className="font-display text-lg text-primary">
+            Break Even Threshold
+          </h2>
+          <p className="mt-1 max-w-2xl text-sm text-secondary">
+            Categorize small gains and losses within a small dollar range (e.g. ±$5.00) as Break Even trades so your win rate and loss rate reflect true trading edge rather than noise.
+          </p>
+        </div>
+        <div className="p-5">
+          <BreakevenThresholdForm defaultValue={breakevenThresholdValue} />
         </div>
       </section>
 

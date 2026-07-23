@@ -103,19 +103,119 @@ export function closedPnlTrades(
 // Count-based stats
 // =============================================================================
 
+/** Default Breakeven magnitude ($5.00). Trades with |P&L| <= threshold are Break Even. */
+export const DEFAULT_BREAKEVEN_THRESHOLD = 5.0;
+
+/**
+ * Resolve a stored breakeven-threshold string (from user_settings, nullable) to
+ * a non-negative number, falling back to DEFAULT_BREAKEVEN_THRESHOLD.
+ */
+export function resolveBreakevenThreshold(stored: string | number | null | undefined): number {
+  if (stored == null) return DEFAULT_BREAKEVEN_THRESHOLD;
+  const n = Number(stored);
+  return Number.isFinite(n) && n >= 0 ? n : DEFAULT_BREAKEVEN_THRESHOLD;
+}
+
+/**
+ * Classify a trade result based on its net P&L and a breakeven threshold magnitude.
+ * Trades with |P&L| <= threshold are categorized as 'breakeven'.
+ */
+export function classifyTradeResult(
+  pnl: number | null,
+  threshold: number = DEFAULT_BREAKEVEN_THRESHOLD,
+): 'win' | 'loss' | 'breakeven' | 'unrealized' {
+  if (pnl == null) return 'unrealized';
+  if (Math.abs(pnl) <= threshold) return 'breakeven';
+  return pnl > threshold ? 'win' : 'loss';
+}
+
+export interface WinLossBreakdown {
+  wins: number;
+  losses: number;
+  breakEvens: number;
+  total: number;
+  /** Standard Win Rate = Wins / Total Closed Trades */
+  winRate: number;
+  /** Adjusted Win Rate = Wins / (Wins + Losses) (excluding Break Evens from denominator) */
+  adjustedWinRate: number;
+  /** Percentage of wins over total closed */
+  winPct: number;
+  /** Percentage of losses over total closed */
+  lossPct: number;
+  /** Percentage of break evens over total closed */
+  bePct: number;
+  threshold: number;
+}
+
+/**
+ * Full breakdown of Wins, Losses, and Break Evens given a P&L threshold.
+ */
+export function winLossBreakdown(
+  trades: ReadonlyArray<StatTrade>,
+  threshold: number = DEFAULT_BREAKEVEN_THRESHOLD,
+): WinLossBreakdown {
+  const closed = closedPnlTrades(trades);
+  const total = closed.length;
+  if (total === 0) {
+    return {
+      wins: 0,
+      losses: 0,
+      breakEvens: 0,
+      total: 0,
+      winRate: 0,
+      adjustedWinRate: 0,
+      winPct: 0,
+      lossPct: 0,
+      bePct: 0,
+      threshold,
+    };
+  }
+
+  let wins = 0;
+  let losses = 0;
+  let breakEvens = 0;
+
+  for (const t of closed) {
+    const cat = classifyTradeResult(t.pnl, threshold);
+    if (cat === 'win') wins++;
+    else if (cat === 'loss') losses++;
+    else if (cat === 'breakeven') breakEvens++;
+  }
+
+  const winRate = wins / total;
+  const decisiveCount = wins + losses;
+  const adjustedWinRate = decisiveCount > 0 ? wins / decisiveCount : 0;
+
+  return {
+    wins,
+    losses,
+    breakEvens,
+    total,
+    winRate,
+    adjustedWinRate,
+    winPct: (wins / total) * 100,
+    lossPct: (losses / total) * 100,
+    bePct: (breakEvens / total) * 100,
+    threshold,
+  };
+}
+
 /** Total count of trades that count toward stats (closed with realized P&L). */
 export function tradeCount(trades: ReadonlyArray<StatTrade>): number {
   return closedPnlTrades(trades).length;
 }
 
 /**
- * Win rate as a fraction in [0, 1]. wins / closed. Returns 0 for an empty set
- * (the dashboard renders "—" for empty, but the number is well-defined).
+ * Win rate as a fraction in [0, 1]. wins / closed. Returns 0 for an empty set.
+ * Trades within [-threshold, +threshold] are categorized as Break Even.
  */
-export function winRate(trades: ReadonlyArray<StatTrade>): number {
+export function winRate(
+  trades: ReadonlyArray<StatTrade>,
+  threshold: number = DEFAULT_BREAKEVEN_THRESHOLD,
+): number {
   const closed = closedPnlTrades(trades);
   if (closed.length === 0) return 0;
-  const wins = closed.filter((t) => t.pnl > 0).length;
+  const wins = closed.filter((t) => classifyTradeResult(t.pnl, threshold) === 'win').length;
   return wins / closed.length;
 }
 
@@ -126,7 +226,10 @@ export function winRate(trades: ReadonlyArray<StatTrade>): number {
  * there are no trades. Trades are ordered by entry time ascending so the
  * "current" streak is the most recent run.
  */
-export function currentStreak(trades: ReadonlyArray<StatTrade>): number {
+export function currentStreak(
+  trades: ReadonlyArray<StatTrade>,
+  threshold: number = DEFAULT_BREAKEVEN_THRESHOLD,
+): number {
   const closed = closedPnlTrades(trades);
   if (closed.length === 0) return 0;
 
@@ -136,15 +239,16 @@ export function currentStreak(trades: ReadonlyArray<StatTrade>): number {
     .map((t) => ({ pnl: t.pnl as number, ms: parseTime(t.entryTime) }))
     .sort((a, b) => a.ms - b.ms);
 
-  // Walk backward from the most recent, counting while the sign holds.
+  // Walk backward from the most recent, counting while the category matches.
   const last = timed[timed.length - 1];
-  if (last.pnl === 0) return 0;
-  const sign = last.pnl > 0 ? 1 : -1;
+  const lastCat = classifyTradeResult(last.pnl, threshold);
+  if (lastCat === 'breakeven') return 0;
+  const sign = lastCat === 'win' ? 1 : -1;
   let streak = 0;
   for (let i = timed.length - 1; i >= 0; i--) {
-    const pnl = timed[i].pnl;
-    if (pnl === 0) break;
-    if ((pnl > 0 ? 1 : -1) === sign) streak++;
+    const cat = classifyTradeResult(timed[i].pnl, threshold);
+    if (cat === 'breakeven') break;
+    if ((cat === 'win' ? 1 : -1) === sign) streak++;
     else break;
   }
   return sign * streak;
@@ -357,29 +461,91 @@ function clamp01(value: number): number {
 /** Expectancy anchor: $100/trade average counts as a "full" edge. Tunable. */
 const EXPECTANCY_ANCHOR_USD = 100;
 
+export interface EdgeScoreDetails {
+  score: number;
+  adjustedScore: number;
+  winComponent: number;
+  adjustedWinComponent: number;
+  expectancyComponent: number;
+  consistencyComponent: number;
+  rawWinRate: number;
+  adjustedWinRate: number;
+  expectancy: number | null;
+  profitFactor: number | null;
+  threshold: number;
+}
+
+/**
+ * Compute detailed Edge Score metrics including standard and adjusted Edge Scores.
+ */
+export function computeEdgeScoreDetails(
+  trades: ReadonlyArray<StatTrade>,
+  threshold: number = DEFAULT_BREAKEVEN_THRESHOLD,
+): EdgeScoreDetails {
+  const closed = closedPnlTrades(trades);
+  if (closed.length === 0) {
+    return {
+      score: 0,
+      adjustedScore: 0,
+      winComponent: 0,
+      adjustedWinComponent: 0,
+      expectancyComponent: 0,
+      consistencyComponent: 0,
+      rawWinRate: 0,
+      adjustedWinRate: 0,
+      expectancy: null,
+      profitFactor: null,
+      threshold,
+    };
+  }
+
+  const breakdown = winLossBreakdown(trades, threshold);
+  const exp = expectancy(trades) ?? 0;
+  const pf = profitFactor(trades);
+
+  const winComponent = breakdown.winRate;
+  const adjustedWinComponent = breakdown.adjustedWinRate;
+  const expectancyComponent = clamp01(exp / EXPECTANCY_ANCHOR_USD);
+  const consistencyComponent = pf == null ? 0 : clamp01(pf / 2);
+
+  const score = Math.round(
+    100 * (0.35 * winComponent + 0.35 * expectancyComponent + 0.30 * consistencyComponent)
+  );
+
+  const adjustedScore = Math.round(
+    100 * (0.35 * adjustedWinComponent + 0.35 * expectancyComponent + 0.30 * consistencyComponent)
+  );
+
+  return {
+    score,
+    adjustedScore,
+    winComponent,
+    adjustedWinComponent,
+    expectancyComponent,
+    consistencyComponent,
+    rawWinRate: breakdown.winRate,
+    adjustedWinRate: breakdown.adjustedWinRate,
+    expectancy: expectancy(trades),
+    profitFactor: pf,
+    threshold,
+  };
+}
+
 /**
  * Compute the Edge Score (0–100). See the formula block above for the full
  * derivation and the reasoning behind each component's normalization and
  * weight. Returns 0 for an empty trade set.
  */
-export function edgeScore(trades: ReadonlyArray<StatTrade>): number {
+export function edgeScore(
+  trades: ReadonlyArray<StatTrade>,
+  threshold: number = DEFAULT_BREAKEVEN_THRESHOLD,
+  useAdjusted: boolean = false,
+): number {
   const closed = closedPnlTrades(trades);
   if (closed.length === 0) return 0;
 
-  const win = winRate(trades); // already [0, 1]
-  const exp = expectancy(trades) ?? 0; // dollars, may be negative
-  const pf = profitFactor(trades); // null when no losses
-
-  const winComponent = win;
-  const expectancyComponent = clamp01(exp / EXPECTANCY_ANCHOR_USD);
-  const consistencyComponent = pf == null ? 0 : clamp01(pf / 2);
-
-  const score =
-    0.35 * winComponent +
-    0.35 * expectancyComponent +
-    0.30 * consistencyComponent;
-
-  return Math.round(score * 100);
+  const details = computeEdgeScoreDetails(trades, threshold);
+  return useAdjusted ? details.adjustedScore : details.score;
 }
 
 // =============================================================================

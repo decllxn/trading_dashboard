@@ -24,16 +24,20 @@ import { test } from 'node:test';
 import * as assert from 'node:assert/strict';
 import {
   averageR,
+  classifyTradeResult,
   closedPnlTrades,
   currentStreak,
   dailyPnlSeries,
+  DEFAULT_BREAKEVEN_THRESHOLD,
   edgeScore,
   expectancy,
   maxDrawdown,
   profitFactor,
+  resolveBreakevenThreshold,
   sharpeRatio,
   sortinoRatio,
   tradeCount,
+  winLossBreakdown,
   winRate,
   computeRollingStats,
   type StatTrade,
@@ -67,10 +71,44 @@ test('tradeCount = 7 (open trade excluded)', () => {
 });
 
 // =============================================================================
-// Win rate — wins=4 of 7 → 4/7
+// Win rate & Break Even breakdown
 // =============================================================================
 
-test('winRate = 4/7', () => {
+test('classifyTradeResult categorizes wins, losses, and breakevens correctly', () => {
+  assert.equal(classifyTradeResult(10, 5), 'win');
+  assert.equal(classifyTradeResult(-10, 5), 'loss');
+  assert.equal(classifyTradeResult(-2.99, 5), 'breakeven');
+  assert.equal(classifyTradeResult(0.01, 5), 'breakeven');
+  assert.equal(classifyTradeResult(0, 5), 'breakeven');
+  assert.equal(classifyTradeResult(-5.00, 5), 'breakeven');
+  assert.equal(classifyTradeResult(5.00, 5), 'breakeven');
+  assert.equal(classifyTradeResult(5.01, 5), 'win');
+  assert.equal(classifyTradeResult(-5.01, 5), 'loss');
+  assert.equal(classifyTradeResult(null, 5), 'unrealized');
+});
+
+test('winLossBreakdown accurately computes wins, losses, breakevens, and adjusted win rate', () => {
+  const testTrades: StatTrade[] = [
+    { pnl: 150, status: 'closed' },   // Win
+    { pnl: -120, status: 'closed' },  // Loss
+    { pnl: -2.99, status: 'closed' }, // Break Even
+    { pnl: 0.01, status: 'closed' },  // Break Even
+    { pnl: 200, status: 'closed' },   // Win
+  ];
+
+  const breakdown = winLossBreakdown(testTrades, 5.0);
+  assert.equal(breakdown.wins, 2);
+  assert.equal(breakdown.losses, 1);
+  assert.equal(breakdown.breakEvens, 2);
+  assert.equal(breakdown.total, 5);
+  assert.equal(breakdown.winRate, 2 / 5); // 0.4 (40%)
+  assert.equal(breakdown.adjustedWinRate, 2 / 3); // 2 / (2 + 1) = 66.67%
+  assert.equal(breakdown.winPct, 40);
+  assert.equal(breakdown.lossPct, 20);
+  assert.equal(breakdown.bePct, 40);
+});
+
+test('winRate = 4/7 for SAMPLE (all trade PnLs > $5 threshold)', () => {
   assert.equal(winRate(SAMPLE), 4 / 7);
 });
 

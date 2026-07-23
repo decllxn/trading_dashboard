@@ -161,10 +161,16 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
       <Button onClick={handleOpen}>Connect a broker</Button>
 
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-base/80 backdrop-blur-sm p-4">
-          <div className={`w-full border border-hairline bg-surface rounded-card p-5 relative max-h-[85vh] overflow-y-auto no-scrollbar transition-all ${
-            step === 'success' ? 'max-w-xl' : 'max-w-md'
-          }`}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-base/80 backdrop-blur-sm p-4 transition-opacity"
+          onClick={handleClose}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`w-[calc(100%-2rem)] sm:w-full border border-hairline bg-surface rounded-card p-4 sm:p-6 relative max-h-[90vh] overflow-y-auto no-scrollbar transition-all ${
+              step === 'success' ? 'max-w-xl' : 'max-w-md'
+            }`}
+          >
             {/* Close Button */}
             <button
               onClick={handleClose}

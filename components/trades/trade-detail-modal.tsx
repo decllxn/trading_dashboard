@@ -11,6 +11,7 @@ import {
   formatR,
   pnlColorClass,
   rColorClass,
+  tradeResultTag,
   calculateTradeRisk,
   formatRisk,
 } from '@/lib/trades';
@@ -34,6 +35,7 @@ export function TradeDetailModal({ trade, onClose }: TradeDetailModalProps) {
   const [isPending, startTransition] = useTransition();
 
   const isClosed = trade.status === 'closed';
+  const outcomeTag = tradeResultTag(trade.pnl);
 
   const handleDelete = () => {
     if (deleteInput !== trade.instrument) return;
@@ -53,9 +55,15 @@ export function TradeDetailModal({ trade, onClose }: TradeDetailModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-base/90 p-3 sm:p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-base/90 p-3 sm:p-4 transition-opacity"
+      onClick={onClose}
+    >
       {/* Modal Container */}
-      <div className="w-full max-w-2xl border border-hairline bg-surface rounded-card max-h-[85vh] flex flex-col overflow-hidden shadow-none">
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-[calc(100%-1rem)] sm:w-full max-w-2xl border border-hairline bg-surface rounded-card max-h-[90vh] flex flex-col overflow-hidden shadow-none"
+      >
         {/* Sticky Header */}
         <header className="sticky top-0 z-20 flex items-center justify-between border-b border-hairline bg-surface px-4 py-3 sm:px-6 sm:py-4 shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -80,6 +88,11 @@ export function TradeDetailModal({ trade, onClose }: TradeDetailModalProps) {
             <span className="px-2 py-0.5 border border-hairline rounded text-[10px] font-medium text-secondary uppercase shrink-0">
               {trade.status}
             </span>
+            {isClosed && outcomeTag ? (
+              <span className={outcomeTag.className}>
+                {outcomeTag.label}
+              </span>
+            ) : null}
           </div>
 
           <button
@@ -212,6 +225,38 @@ export function TradeDetailModal({ trade, onClose }: TradeDetailModalProps) {
               </dl>
             </div>
           </div>
+
+          {/* Attached Pre-Trade Rules Section */}
+          {trade.pretradeChecklist && trade.pretradeChecklist.length > 0 && (
+            <div className="border-t border-hairline pt-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="font-display text-primary text-xs uppercase tracking-wide">
+                  Attached Pre-Trade &amp; Risk Rules
+                </h3>
+                <span className="num text-[10px] text-tertiary font-mono">
+                  {trade.pretradeChecklist.filter((i) => i.checked).length} / {trade.pretradeChecklist.length} Cleared
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1">
+                {trade.pretradeChecklist.map((rule) => (
+                  <div
+                    key={rule.id}
+                    className={cn(
+                      'flex items-center gap-2 px-2.5 py-1.5 rounded-sm border text-[11px]',
+                      rule.checked
+                        ? 'border-gain/30 bg-gain/5 text-gain'
+                        : 'border-hairline bg-surface-raised/40 text-tertiary line-through'
+                    )}
+                  >
+                    <span className="num text-[9px] uppercase font-mono font-bold">
+                      {rule.checked ? '✓ CLEARED' : '✕ SKIPPED'}
+                    </span>
+                    <span className="truncate">{rule.text}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Screenshots Gallery */}
           {trade.images && trade.images.length > 0 && (

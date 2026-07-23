@@ -4,6 +4,7 @@ import {
   averageR,
   currentStreak,
   edgeScore,
+  computeEdgeScoreDetails,
   expectancy,
   maxDrawdown,
   profitFactor,
@@ -11,6 +12,8 @@ import {
   sortinoRatio,
   tradeCount,
   winRate,
+  winLossBreakdown,
+  resolveBreakevenThreshold,
   cumulativePnlSeries,
   equitySeries,
   STARTING_BALANCE_DEFAULT,
@@ -69,10 +72,20 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data: rawTrades, error } = await supabase
+  let { data: rawTrades, error } = await supabase
     .from('trades')
-    .select('id, pnl, commission, swap, fees, r_multiple, entry_time, exit_time, status, instrument, direction, entry_price, exit_price, size, stop_price, target_price')
+    .select('id, pnl, commission, swap, fees, r_multiple, entry_time, exit_time, status, instrument, direction, entry_price, exit_price, size, stop_price, target_price, pretrade_checklist')
     .eq('user_id', user.id);
+
+  if (error && error.message?.includes('pretrade_checklist')) {
+    const retry = await supabase
+      .from('trades')
+      .select('id, pnl, commission, swap, fees, r_multiple, entry_time, exit_time, status, instrument, direction, entry_price, exit_price, size, stop_price, target_price')
+      .eq('user_id', user.id);
+
+    rawTrades = retry.data as any;
+    error = retry.error;
+  }
 
   if (error) {
     return (
@@ -86,16 +99,16 @@ export default async function DashboardPage() {
     );
   }
 
-  // User's configured starting capital (Settings). Falls back to the app
-  // default when unset so the equity curve always has a baseline.
+  // User's configured starting capital & break even threshold
   const { data: settingsRow } = await supabase
     .from('user_settings')
-    .select('starting_balance')
+    .select('starting_balance, breakeven_threshold')
     .eq('user_id', user.id)
     .maybeSingle();
   const startingBalance = settingsRow?.starting_balance
     ? Number(settingsRow.starting_balance)
     : STARTING_BALANCE_DEFAULT;
+  const breakevenThreshold = resolveBreakevenThreshold(settingsRow?.breakeven_threshold);
 
   const trades: StatTrade[] = ((rawTrades ?? []) as Array<{
     id: string;
@@ -136,19 +149,21 @@ export default async function DashboardPage() {
       size: toNumber(t.size),
       stopPrice: toNumber(t.stop_price),
       targetPrice: toNumber(t.target_price),
+      pretradeChecklist: (t as any).pretrade_checklist || [],
     };
   });
 
   const count = tradeCount(trades);
   const empty = count === 0;
 
-  const score = edgeScore(trades);
+  const breakdown = winLossBreakdown(trades, breakevenThreshold);
+  const scoreDetails = computeEdgeScoreDetails(trades, breakevenThreshold);
   const stats = {
-    winRate: winRate(trades),
+    winRate: winRate(trades, breakevenThreshold),
     expectancy: expectancy(trades),
     profitFactor: profitFactor(trades),
     maxDrawdown: maxDrawdown(trades),
-    streak: currentStreak(trades),
+    streak: currentStreak(trades, breakevenThreshold),
   };
 
   // Sharpe / Sortino / average R are computed and surfaced in a secondary
@@ -227,40 +242,47 @@ export default async function DashboardPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[380px_1fr]">
-        <div className="space-y-6">
-          <EdgeScoreGauge score={score} empty={empty} />
-          <DisciplineChecklist trades={trades} />
+      {/* TOP SECTION: EDGE SCORE GAUGE & STAT GRIDS */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[380px_1fr] items-start">
+        <div>
+          <EdgeScoreGauge score={scoreDetails.score} details={scoreDetails} empty={empty} />
         </div>
 
-        <div className="space-y-6 flex flex-col justify-between">
-          <div className="space-y-6">
-            <section>
-              <h2 className="font-display text-primary mb-3 text-xs uppercase tracking-wide">
-                Performance
-              </h2>
-              <StatGrid
-                winRate={stats.winRate}
-                expectancy={stats.expectancy}
-                profitFactor={stats.profitFactor}
-                maxDrawdown={stats.maxDrawdown}
-                streak={stats.streak}
-                empty={empty}
-              />
-            </section>
+        <div className="space-y-6">
+          <section>
+            <h2 className="font-display text-primary mb-3 text-xs uppercase tracking-wide">
+              Performance
+            </h2>
+            <StatGrid
+              winRate={stats.winRate}
+              expectancy={stats.expectancy}
+              profitFactor={stats.profitFactor}
+              maxDrawdown={stats.maxDrawdown}
+              streak={stats.streak}
+              winLossBreakdown={breakdown}
+              empty={empty}
+            />
+          </section>
 
-            <section>
-              <h2 className="font-display text-primary mb-3 text-xs uppercase tracking-wide">
-                Risk-adjusted
-              </h2>
-              <RiskStatGrid
-                sharpe={empty || sharpe == null ? null : sharpe.toFixed(2)}
-                sortino={empty || sortino == null ? null : sortino.toFixed(2)}
-                avgR={empty || avgR == null ? null : formatR(avgR)}
-              />
-            </section>
-          </div>
+          <section>
+            <h2 className="font-display text-primary mb-3 text-xs uppercase tracking-wide">
+              Risk-adjusted
+            </h2>
+            <RiskStatGrid
+              sharpe={empty || sharpe == null ? null : sharpe.toFixed(2)}
+              sortino={empty || sortino == null ? null : sortino.toFixed(2)}
+              avgR={empty || avgR == null ? null : formatR(avgR)}
+            />
+          </section>
+        </div>
+      </div>
 
+      {/* DISCIPLINE & BEHAVIORAL ANALYTICS SECTION */}
+      <div className="mt-6 grid grid-cols-1 xl:grid-cols-[380px_1fr] gap-6 items-start">
+        <div>
+          <DisciplineChecklist trades={trades} />
+        </div>
+        <div>
           <DisciplineAnalytics trades={trades} />
         </div>
       </div>
