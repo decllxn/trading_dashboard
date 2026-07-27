@@ -13,6 +13,8 @@ import { cn } from '@/lib/utils';
 
 interface AllocationChartProps {
   trades: ReadonlyArray<StatTrade>;
+  selectedAsset?: string;
+  onSelectAsset?: (asset: string) => void;
 }
 
 interface AllocationData {
@@ -33,7 +35,7 @@ const ALLOCATION_COLORS = [
   '#1A202C', // deep charcoal
 ];
 
-export function AllocationChart({ trades }: AllocationChartProps) {
+export function AllocationChart({ trades, selectedAsset = 'ALL', onSelectAsset }: AllocationChartProps) {
   const { data, totalTrades } = useMemo(() => {
     const counts: Record<string, number> = {};
     
@@ -73,11 +75,22 @@ export function AllocationChart({ trades }: AllocationChartProps) {
 
   return (
     <div className="border-hairline bg-surface rounded-card border p-4 pt-6">
-      <h2 className="font-display text-primary text-xs uppercase tracking-wide mb-1">
-        Instrument Allocation
-      </h2>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+        <h2 className="font-display text-primary text-xs uppercase tracking-wide">
+          Instrument Allocation
+        </h2>
+        {selectedAsset !== 'ALL' && onSelectAsset && (
+          <button
+            type="button"
+            onClick={() => onSelectAsset('ALL')}
+            className="text-[10px] text-accent-signal hover:underline font-mono tracking-tight cursor-pointer"
+          >
+            Reset Filter (Showing: {selectedAsset})
+          </button>
+        )}
+      </div>
       <p className="text-secondary text-[11px] mb-6">
-        Trade count distribution across instruments.
+        Trade count distribution across instruments. Click an instrument to inspect telemetry.
       </p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
@@ -93,10 +106,24 @@ export function AllocationChart({ trades }: AllocationChartProps) {
                 outerRadius={75}
                 paddingAngle={2}
                 dataKey="count"
+                onClick={(entry) => {
+                  if (onSelectAsset && entry && entry.name) {
+                    onSelectAsset(selectedAsset === entry.name ? 'ALL' : entry.name);
+                  }
+                }}
+                className="cursor-pointer"
               >
-                {data.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} stroke="#14171C" strokeWidth={2} />
-                ))}
+                {data.map((entry, index) => {
+                  const isSelected = selectedAsset === entry.name;
+                  return (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={entry.color}
+                      stroke={isSelected ? '#4FD1C5' : '#14171C'}
+                      strokeWidth={isSelected ? 3 : 2}
+                    />
+                  );
+                })}
               </Pie>
               <Tooltip
                 content={({ active, payload }) => {
@@ -150,23 +177,37 @@ export function AllocationChart({ trades }: AllocationChartProps) {
               </tr>
             </thead>
             <tbody>
-              {data.map((item) => (
-                <tr key={item.name} className="border-b border-hairline/30 last:border-0 hover:bg-surface-raised/40 transition-colors duration-150">
-                  <td className="py-2 flex items-center gap-2 text-xs font-sans text-primary">
-                    <span 
-                      className="w-1.5 h-1.5 rounded-sm shrink-0" 
-                      style={{ backgroundColor: item.color }}
-                    />
-                    {item.name}
-                  </td>
-                  <td className="num py-2 text-right text-xs text-primary font-semibold">
-                    {item.count}
-                  </td>
-                  <td className="num py-2 text-right text-xs text-secondary">
-                    {item.percentage.toFixed(1)}%
-                  </td>
-                </tr>
-              ))}
+              {data.map((item) => {
+                const isSelected = selectedAsset === item.name;
+                return (
+                  <tr
+                    key={item.name}
+                    onClick={() => onSelectAsset?.(isSelected ? 'ALL' : item.name)}
+                    className={cn(
+                      'border-b border-hairline/30 last:border-0 transition-colors duration-150 cursor-pointer',
+                      isSelected
+                        ? 'bg-surface-raised text-accent-signal'
+                        : 'hover:bg-surface-raised/40 text-primary'
+                    )}
+                  >
+                    <td className="py-2 flex items-center gap-2 text-xs font-sans">
+                      <span 
+                        className="w-1.5 h-1.5 rounded-sm shrink-0" 
+                        style={{ backgroundColor: item.color }}
+                      />
+                      <span className={cn(isSelected ? 'font-medium text-accent-signal' : 'text-primary')}>
+                        {item.name}
+                      </span>
+                    </td>
+                    <td className="num py-2 text-right text-xs font-semibold">
+                      {item.count}
+                    </td>
+                    <td className="num py-2 text-right text-xs text-secondary">
+                      {item.percentage.toFixed(1)}%
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

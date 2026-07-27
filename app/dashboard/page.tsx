@@ -31,7 +31,7 @@ import { EquityCurveChart } from '@/components/charts/equity-curve-chart';
 import { EquityComparisonChart } from '@/components/charts/equity-comparison-chart';
 import { RMultipleHistogram } from '@/components/charts/r-multiple-histogram';
 import { HourlyPnlChart } from '@/components/charts/hourly-pnl-chart';
-import { AllocationChart } from '@/components/charts/allocation-chart';
+import { AssetAllocationSection } from '@/components/dashboard/asset-allocation-section';
 import { MoodChart } from '@/components/charts/mood-chart';
 import { getMarketData } from '@/lib/market-data';
 import type { StatTrade } from '@/lib/stats';
@@ -314,7 +314,7 @@ export default async function DashboardPage() {
       </div>
 
       <div className="mt-6">
-        <AllocationChart trades={trades} />
+        <AssetAllocationSection trades={trades} breakevenThreshold={breakevenThreshold} />
       </div>
     </main>
   );
