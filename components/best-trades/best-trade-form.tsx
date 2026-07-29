@@ -54,12 +54,20 @@ export function BestTradeForm({ tradesList, onSuccess, onCancel }: BestTradeForm
     setUploadError('');
 
     try {
+      // Get the authenticated user's ID for path-scoped storage policy
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setUploadError('You must be signed in to upload images.');
+        setIsUploading(false);
+        return;
+      }
+
       const newUrls: string[] = [...uploadedImages];
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const fileExt = file.name ? file.name.split('.').pop() : 'png';
         const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
-        const filePath = `best-trades/${fileName}`;
+        const filePath = `${user.id}/best-trades/${fileName}`;
 
         const { data, error } = await supabase.storage
           .from('trade-screenshots')

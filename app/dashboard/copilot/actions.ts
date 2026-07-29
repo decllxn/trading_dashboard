@@ -3,7 +3,7 @@
 import { db } from '@/db';
 import { copilotSessions, copilotMessages } from '@/db/schema';
 import { createServerClient } from '@/lib/supabase';
-import { eq, desc, asc } from 'drizzle-orm';
+import { eq, desc, asc, and } from 'drizzle-orm';
 
 async function getUserId() {
   const supabase = createServerClient();
@@ -24,8 +24,19 @@ export async function getSessions() {
 }
 
 export async function getSessionMessages(sessionId: string) {
-  await getUserId(); // Check auth
+  const userId = await getUserId();
   if (!db) return [];
+
+  // Verify the session belongs to the authenticated user before returning
+  // messages. Without this check, an authenticated user could read another
+  // user's copilot conversations by guessing session UUIDs.
+  const [session] = await db
+    .select({ id: copilotSessions.id })
+    .from(copilotSessions)
+    .where(and(eq(copilotSessions.id, sessionId), eq(copilotSessions.userId, userId)))
+    .limit(1);
+  if (!session) return [];
+
   return db
     .select()
     .from(copilotMessages)
@@ -47,8 +58,18 @@ export async function createSession(title: string) {
 }
 
 export async function saveMessage(sessionId: string, role: 'user' | 'assistant', content: string) {
-  await getUserId(); // Check auth
+  const userId = await getUserId();
   if (!db) throw new Error('Database is not configured');
+
+  // Verify the session belongs to the authenticated user before inserting a
+  // message. Without this, a user could inject messages into another user's
+  // copilot conversation by guessing the session UUID.
+  const [session] = await db
+    .select({ id: copilotSessions.id })
+    .from(copilotSessions)
+    .where(and(eq(copilotSessions.id, sessionId), eq(copilotSessions.userId, userId)))
+    .limit(1);
+  if (!session) throw new Error('Session not found');
 
   // Insert the message
   const [newMessage] = await db
@@ -64,15 +85,17 @@ export async function saveMessage(sessionId: string, role: 'user' | 'assistant',
   await db
     .update(copilotSessions)
     .set({ updatedAt: new Date() })
-    .where(eq(copilotSessions.id, sessionId));
+    .where(and(eq(copilotSessions.id, sessionId), eq(copilotSessions.userId, userId)));
 
   return newMessage;
 }
 
 export async function deleteSession(sessionId: string) {
-  await getUserId(); // Check auth
+  const userId = await getUserId();
   if (!db) throw new Error('Database is not configured');
+  // Scope the delete to the authenticated user's own sessions so a user
+  // cannot delete another user's session by guessing the UUID.
   await db
     .delete(copilotSessions)
-    .where(eq(copilotSessions.id, sessionId));
+    .where(and(eq(copilotSessions.id, sessionId), eq(copilotSessions.userId, userId)));
 }

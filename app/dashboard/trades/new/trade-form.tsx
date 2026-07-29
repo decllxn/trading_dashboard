@@ -160,11 +160,19 @@ export function TradeForm({ tags, initialData }: TradeFormProps) {
 
     const newUrls = [...uploadedImages];
     try {
+      // Get the authenticated user's ID for path-scoped storage policy
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setUploadError("You must be signed in to upload images.");
+        setIsUploading(false);
+        return;
+      }
+
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const fileExt = file.name ? file.name.split('.').pop() : 'png';
         const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`;
-        const filePath = `screenshots/${fileName}`;
+        const filePath = `${user.id}/screenshots/${fileName}`;
 
         const { data, error } = await supabase.storage
           .from('trade-screenshots')
