@@ -40,6 +40,10 @@ import {
   winLossBreakdown,
   winRate,
   computeRollingStats,
+  computeTotalDeposits,
+  computeTotalWithdrawals,
+  computeNetCapitalCashflow,
+  accountEquitySeries,
   type StatTrade,
 } from './stats.ts';
 
@@ -295,5 +299,42 @@ test('computeRollingStats matches hand-calculated OLS expected values', () => {
   assert.ok(Math.abs(rolling[2].correlation - 0.8660254) < 1e-7);
   
   console.log('Rolling OLS stats verified successfully:', rolling[2]);
+});
+
+test('capital transactions cashflow and account equity series calculations', () => {
+  const txs = [
+    { id: '1', type: 'deposit' as const, amount: 500, date: '2024-01-01T00:00:00Z' },
+    { id: '2', type: 'withdrawal' as const, amount: 11, date: '2024-01-03T00:00:00Z', brokerName: 'Pepperstone', note: 'Broker withdrawal' },
+  ];
+
+  assert.equal(computeTotalDeposits(txs), 500);
+  assert.equal(computeTotalWithdrawals(txs), 11);
+  assert.equal(computeNetCapitalCashflow(txs), 489);
+
+  const trades = [
+    { pnl: 100, status: 'closed', entryTime: '2024-01-02T00:00:00Z' },
+    { pnl: -50, status: 'closed', entryTime: '2024-01-04T00:00:00Z' },
+  ];
+
+  const series = accountEquitySeries(trades, 100, txs);
+  // Expected timeline:
+  // Day 1 (2024-01-01): deposit +500 -> balance 100 + 500 = 600
+  // Day 2 (2024-01-02): trade PnL +100 -> balance 600 + 100 = 700
+  // Day 3 (2024-01-03): withdrawal -11 -> balance 700 - 11 = 689
+  // Day 4 (2024-01-04): trade PnL -50 -> balance 689 - 50 = 639
+  assert.equal(series.length, 4);
+  assert.equal(series[0].time, '2024-01-01');
+  assert.equal(series[0].value, 600);
+
+  assert.equal(series[1].time, '2024-01-02');
+  assert.equal(series[1].value, 700);
+
+  assert.equal(series[2].time, '2024-01-03');
+  assert.equal(series[2].value, 689);
+
+  assert.equal(series[3].time, '2024-01-04');
+  assert.equal(series[3].value, 639);
+
+  console.log('Capital transaction tests passed successfully.');
 });
 

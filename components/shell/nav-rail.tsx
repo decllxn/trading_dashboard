@@ -11,6 +11,7 @@ import {
   Settings,
   Trophy,
   Target,
+  Wallet,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -36,6 +37,12 @@ const NAV_ITEMS: NavItem[] = [
     href: '/dashboard/trades',
     icon: ArrowLeftRight,
     match: (p) => p.startsWith('/dashboard/trades'),
+  },
+  {
+    label: 'Capital',
+    href: '/dashboard/capital',
+    icon: Wallet,
+    match: (p) => p.startsWith('/dashboard/capital'),
   },
   {
     label: 'Journal',
@@ -79,10 +86,10 @@ const NAV_ITEMS: NavItem[] = [
 const MOBILE_NAV_ITEMS: NavItem[] = [
   NAV_ITEMS[0], // Dashboard
   NAV_ITEMS[1], // Trades
-  NAV_ITEMS[2], // Journal
-  NAV_ITEMS[3], // Simulations
-  NAV_ITEMS[4], // Copilot
-  NAV_ITEMS[7], // Settings
+  NAV_ITEMS[2], // Capital
+  NAV_ITEMS[3], // Journal
+  NAV_ITEMS[5], // Copilot
+  NAV_ITEMS[8], // Settings
 ];
 
 export function NavRail() {

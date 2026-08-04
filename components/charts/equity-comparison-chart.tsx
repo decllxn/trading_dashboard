@@ -12,6 +12,13 @@ import {
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 
+export interface CapitalTransactionItem {
+  id?: string;
+  type: 'deposit' | 'withdrawal';
+  amount: number;
+  date: string;
+}
+
 interface EquityComparisonChartProps {
   userReturnSeries: { time: string; value: number }[]; // normalized % return
   spyReturnSeries: { time: string; value: number }[];  // normalized % return
@@ -20,12 +27,14 @@ interface EquityComparisonChartProps {
     beta: number | null;
     correlation: number | null;
   } | null;
+  capitalTransactions?: CapitalTransactionItem[];
 }
 
 export function EquityComparisonChart({
   userReturnSeries,
   spyReturnSeries,
   currentStats,
+  capitalTransactions = [],
 }: EquityComparisonChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -100,6 +109,30 @@ export function EquityComparisonChart({
       userSeries.setData(userReturnSeries);
     }
 
+    // Render cashflow markers on timeline
+    if (capitalTransactions.length > 0) {
+      const markers = capitalTransactions
+        .map((tx) => {
+          const isDeposit = tx.type === 'deposit';
+          const dateStr = new Date(tx.date).toISOString().split('T')[0];
+          const amountStr = Number(tx.amount).toLocaleString('en-US', { maximumFractionDigits: 2 });
+          return {
+            time: dateStr,
+            position: isDeposit ? ('belowBar' as const) : ('aboveBar' as const),
+            color: isDeposit ? '#34D399' : '#F87171',
+            shape: isDeposit ? ('arrowUp' as const) : ('arrowDown' as const),
+            text: `${isDeposit ? '+ Dep' : '− Wdr'} $${amountStr}`,
+          };
+        })
+        .sort((a, b) => a.time.localeCompare(b.time));
+
+      try {
+        (userSeries as any).setMarkers(markers);
+      } catch (err) {
+        console.warn('Failed to set markers on EquityComparisonChart:', err);
+      }
+    }
+
     // SPY Benchmark Line Series (% return)
     const spySeries = chart.addSeries(LineSeries, {
       color: '#8B93A1', // Secondary text grey for neutral benchmark
@@ -145,7 +178,7 @@ export function EquityComparisonChart({
       resizeObserver.disconnect();
       chart.remove();
     };
-  }, [userReturnSeries, spyReturnSeries]);
+  }, [userReturnSeries, spyReturnSeries, capitalTransactions]);
 
   const hasStats = currentStats !== null;
 
@@ -267,6 +300,7 @@ export function EquityComparisonChart({
             <EnlargedChart 
               userReturnSeries={userReturnSeries} 
               spyReturnSeries={spyReturnSeries} 
+              capitalTransactions={capitalTransactions}
             />
           </div>
         </DialogContent>
@@ -278,9 +312,10 @@ export function EquityComparisonChart({
 interface EnlargedChartProps {
   userReturnSeries: { time: string; value: number }[];
   spyReturnSeries: { time: string; value: number }[];
+  capitalTransactions?: CapitalTransactionItem[];
 }
 
-function EnlargedChart({ userReturnSeries, spyReturnSeries }: EnlargedChartProps) {
+function EnlargedChart({ userReturnSeries, spyReturnSeries, capitalTransactions = [] }: EnlargedChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -341,6 +376,29 @@ function EnlargedChart({ userReturnSeries, spyReturnSeries }: EnlargedChartProps
       userSeries.setData(userReturnSeries);
     }
 
+    if (capitalTransactions.length > 0) {
+      const markers = capitalTransactions
+        .map((tx) => {
+          const isDeposit = tx.type === 'deposit';
+          const dateStr = new Date(tx.date).toISOString().split('T')[0];
+          const amountStr = Number(tx.amount).toLocaleString('en-US', { maximumFractionDigits: 2 });
+          return {
+            time: dateStr,
+            position: isDeposit ? ('belowBar' as const) : ('aboveBar' as const),
+            color: isDeposit ? '#34D399' : '#F87171',
+            shape: isDeposit ? ('arrowUp' as const) : ('arrowDown' as const),
+            text: `${isDeposit ? '+ Dep' : '− Wdr'} $${amountStr}`,
+          };
+        })
+        .sort((a, b) => a.time.localeCompare(b.time));
+
+      try {
+        (userSeries as any).setMarkers(markers);
+      } catch (err) {
+        console.warn('Failed to set markers on EnlargedChart:', err);
+      }
+    }
+
     const spySeries = chart.addSeries(LineSeries, {
       color: '#8B93A1',
       lineWidth: 1,
@@ -370,7 +428,7 @@ function EnlargedChart({ userReturnSeries, spyReturnSeries }: EnlargedChartProps
       window.removeEventListener('resize', handleResize);
       chart.remove();
     };
-  }, [userReturnSeries, spyReturnSeries]);
+  }, [userReturnSeries, spyReturnSeries, capitalTransactions]);
 
   return <div ref={containerRef} className="h-[400px] w-full" />;
 }

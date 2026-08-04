@@ -1,40 +1,16 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Target, CheckCircle2, Lock, BookOpen, Calculator, Sparkles, TrendingUp, ShieldCheck } from 'lucide-react';
+import { Target, CheckCircle2, Lock, BookOpen, Calculator, Sparkles, TrendingUp, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { LEVELS, resolveActiveLevel, type Level } from '@/lib/levels';
 
 interface GamificationContainerProps {
   currentBalance: number;
   startingBalance: number;
   totalClosedNetPnl: number;
+  highestAchievedLevel?: number;
 }
-
-interface Level {
-  level: number;
-  rank: string;
-  target: number;
-  risk: number;
-  description: string;
-  focus: string;
-}
-
-const LEVELS: Level[] = [
-  { level: 0, rank: "Novice Cadet", target: 150, risk: 15, description: "Focus on execution and discipline. Stick to your strategy rules without looking at the dollar amount.", focus: "Rules & Execution" },
-  { level: 1, rank: "Market Apprentice", target: 300, risk: 30, description: "Consistency is key. Capital doubled, demonstrating initial risk control and market survival.", focus: "Risk Consistency" },
-  { level: 2, rank: "Risk Practitioner", target: 600, risk: 60, description: "Adjusting to size. Begin navigating larger absolute dollar values while keeping percentages identical.", focus: "Size Comfort" },
-  { level: 3, rank: "Discipline Enforcer", target: 1200, risk: 120, description: "Mastering emotional control. The stakes are rising; trade your plan, not your feelings.", focus: "Emotional Detachment" },
-  { level: 4, rank: "Trend Navigator", target: 2400, risk: 240, description: "Adapting to market phases. Execute trend structures and range regimes with identical precision.", focus: "Plan Obedience" },
-  { level: 5, rank: "Capital Guardian", target: 4800, risk: 480, description: "Capital preservation becomes a habit. Shielding your base capital is more important than chasing gains.", focus: "Capital Shielding" },
-  { level: 6, rank: "Edge Specialist", target: 9600, risk: 960, description: "Deep conviction in your edge. Let the statistics play out over large sample sizes of trades.", focus: "Edge Conviction" },
-  { level: 7, rank: "Sovereign Trader", target: 19200, risk: 1920, description: "Absolute independence. Select only the highest probability setups; ignore all market noise.", focus: "Setup Quality" },
-  { level: 8, rank: "Tactical Veteran", target: 38400, risk: 3840, description: "Drawdown tolerance. Manage normal equity dips with complete calmness and statistical perspective.", focus: "Drawdown Mastery" },
-  { level: 9, rank: "Market Operator", target: 76800, risk: 7680, description: "Scaling positions smoothly. The operational rules remain the same; size is the only variable.", focus: "Precision Scaling" },
-  { level: 10, rank: "Portfolio Architect", target: 153600, risk: 15360, description: "Thinking in portfolio terms. Manage correlation, exposure times, and multi-asset risk.", focus: "Exposure Control" },
-  { level: 11, rank: "Apex Strategist", target: 307200, risk: 30720, description: "High-conviction trading. Remain grounded in risk parameters even as account sizes become substantial.", focus: "Size Conviction" },
-  { level: 12, rank: "Macro Voyager", target: 614400, risk: 61440, description: "Patience at the gates. The final hurdle to the million-dollar target. Stay structured, do not rush.", focus: "Milestone Patience" },
-  { level: 13, rank: "Market Legend", target: 1000000, risk: 100000, description: "The ultimate milestone. Complete mastery of trading edge, execution, and psychological control.", focus: "Infinite Game" }
-];
 
 const INITIAL_CHECKLIST = [
   { id: 1, text: "Stop loss and position sizes are pre-calculated before entry.", checked: false },
@@ -48,23 +24,21 @@ export function GamificationContainer({
   currentBalance,
   startingBalance,
   totalClosedNetPnl,
+  highestAchievedLevel = 0,
 }: GamificationContainerProps) {
   // Simulator State (allows user to see projection)
   const [simulatedBalance, setSimulatedBalance] = useState<number | null>(null);
   const activeBalance = simulatedBalance !== null ? simulatedBalance : currentBalance;
 
-  // Active level calculation
-  let activeLevelIdx = 0;
-  for (let i = 0; i < LEVELS.length; i++) {
-    if (activeBalance >= LEVELS[i].target) {
-      activeLevelIdx = i;
-    } else {
-      break;
-    }
-  }
-
-  const activeLevel = LEVELS[activeLevelIdx];
-  const nextLevel = activeLevelIdx < LEVELS.length - 1 ? LEVELS[activeLevelIdx + 1] : null;
+  // Active level calculation with 5R demotion buffer & sticky high-water mark
+  const resolved = resolveActiveLevel(
+    activeBalance,
+    simulatedBalance !== null ? 0 : highestAchievedLevel
+  );
+  const activeLevelIdx = resolved.activeLevelIdx;
+  const activeLevel = resolved.activeLevel;
+  const nextLevel = resolved.nextLevel;
+  const demotionFloor = resolved.demotionFloor;
 
   // Level progress calculation
   let levelProgress = 0;
@@ -175,13 +149,19 @@ export function GamificationContainer({
             style={{ width: `${levelProgress}%` }}
           />
         </div>
-        <div className="flex justify-between mt-1.5">
+        <div className="flex justify-between mt-1.5 flex-wrap gap-1">
           <span className="num text-tertiary text-[10px]">
             Stage Base: ${activeLevel.target.toLocaleString('en-US')}
           </span>
           <span className="num text-tertiary text-[10px]">
             {levelProgress.toFixed(1)}% Completed
           </span>
+          {activeLevelIdx > 0 && (
+            <span className="num text-accent-alert/80 text-[10px] flex items-center gap-1" title="Demotion only occurs if your balance drops 5R below stage target">
+              <ShieldAlert size={10} className="text-accent-alert" />
+              Demotion Floor: ${demotionFloor.toLocaleString('en-US')} (5R Buffer)
+            </span>
+          )}
           {nextLevel && (
             <span className="num text-tertiary text-[10px]">
               Next Base: ${nextLevel.target.toLocaleString('en-US')}

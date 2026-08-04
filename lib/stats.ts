@@ -659,11 +659,125 @@ export function resolveStartingBalance(stored: string | null): number {
 export function equitySeries(
   trades: ReadonlyArray<StatTrade>,
   startingBalance: number | null,
-): { time: string; value: number }[] {
+  transactions: ReadonlyArray<StatCapitalTransaction> = [],
+): { time: string; value: number; cashflowChange?: number; tradePnlChange?: number }[] {
+  if (transactions.length > 0) {
+    return accountEquitySeries(trades, startingBalance, transactions);
+  }
   const base = startingBalance ?? STARTING_BALANCE_DEFAULT;
   const pnl = cumulativePnlSeries(trades);
   return pnl.map((pt) => ({ time: pt.time, value: base + pt.value }));
 }
+
+// =============================================================================
+// Capital Transactions (Deposits & Withdrawals)
+// =============================================================================
+
+export interface StatCapitalTransaction {
+  id: string;
+  type: 'deposit' | 'withdrawal';
+  amount: number;
+  date: string;
+  brokerName?: string | null;
+  note?: string | null;
+}
+
+export function computeTotalDeposits(
+  transactions: ReadonlyArray<StatCapitalTransaction>,
+): number {
+  return transactions
+    .filter((tx) => tx.type === 'deposit')
+    .reduce((acc, tx) => acc + (tx.amount || 0), 0);
+}
+
+export function computeTotalWithdrawals(
+  transactions: ReadonlyArray<StatCapitalTransaction>,
+): number {
+  return transactions
+    .filter((tx) => tx.type === 'withdrawal')
+    .reduce((acc, tx) => acc + (tx.amount || 0), 0);
+}
+
+export function computeNetCapitalCashflow(
+  transactions: ReadonlyArray<StatCapitalTransaction>,
+): number {
+  return computeTotalDeposits(transactions) - computeTotalWithdrawals(transactions);
+}
+
+export interface AccountEquityPoint {
+  time: string;
+  value: number;
+  cashflowChange?: number;
+  tradePnlChange?: number;
+  transactions?: StatCapitalTransaction[];
+}
+
+export function accountEquitySeries(
+  trades: ReadonlyArray<StatTrade>,
+  startingBalance: number | null,
+  transactions: ReadonlyArray<StatCapitalTransaction> = [],
+): AccountEquityPoint[] {
+  const base = startingBalance ?? STARTING_BALANCE_DEFAULT;
+
+  const closedTrades = trades.filter(
+    (t): t is StatTrade & { pnl: number } =>
+      t.status !== 'open' && t.pnl != null,
+  );
+
+  const dayEvents = new Map<
+    string,
+    { tradePnl: number; cashflow: number; txs: StatCapitalTransaction[] }
+  >();
+
+  const getOrCreate = (day: string) => {
+    let entry = dayEvents.get(day);
+    if (!entry) {
+      entry = { tradePnl: 0, cashflow: 0, txs: [] };
+      dayEvents.set(day, entry);
+    }
+    return entry;
+  };
+
+  let unknownDayTradePnl = 0;
+  for (const t of closedTrades) {
+    const day = dayKey(t.entryTime || t.exitTime);
+    if (day === null) {
+      unknownDayTradePnl += t.pnl;
+    } else {
+      getOrCreate(day).tradePnl += t.pnl;
+    }
+  }
+
+  for (const tx of transactions) {
+    const day = dayKey(tx.date);
+    if (day !== null) {
+      const entry = getOrCreate(day);
+      const sign = tx.type === 'deposit' ? 1 : -1;
+      entry.cashflow += sign * tx.amount;
+      entry.txs.push(tx);
+    }
+  }
+
+  const days = [...dayEvents.keys()].sort();
+  const series: AccountEquityPoint[] = [];
+
+  let runningEquity = base + unknownDayTradePnl;
+
+  for (const day of days) {
+    const ev = dayEvents.get(day)!;
+    runningEquity += ev.tradePnl + ev.cashflow;
+    series.push({
+      time: day,
+      value: runningEquity,
+      cashflowChange: ev.cashflow,
+      tradePnlChange: ev.tradePnl,
+      transactions: ev.txs,
+    });
+  }
+
+  return series;
+}
+
 
 /**
  * Computes a histogram distribution of R-multiples for all closed trades with a

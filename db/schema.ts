@@ -405,6 +405,10 @@ export const userSettings = pgTable('user_settings', {
   // Break Even threshold magnitude in account currency (e.g. $5.00). Trades with
   // |P&L| <= breakeven_threshold are categorized as Break Even rather than Win/Loss.
   breakevenThreshold: numeric('breakeven_threshold', { precision: 20, scale: 8 }),
+  // Highest level index achieved (used for sticky level progression with demotion buffer)
+  highestAchievedLevel: integer('highest_achieved_level')
+    .notNull()
+    .default(0),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -518,4 +522,28 @@ export const simulations = pgTable('simulations', {
 export type Simulation = typeof simulations.$inferSelect;
 export type NewSimulation = typeof simulations.$inferInsert;
 
+/**
+ * capital_transactions — user logged deposits and withdrawals.
+ */
+export const transactionTypeEnum = pgEnum('transaction_type', [
+  'deposit',
+  'withdrawal',
+]);
+
+export const capitalTransactions = pgTable('capital_transactions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull(),
+  type: transactionTypeEnum('type').notNull(),
+  amount: numeric('amount', { precision: 20, scale: 8 }).notNull(),
+  date: timestamp('date', { withTimezone: true }).notNull().defaultNow(),
+  brokerName: text('broker_name'),
+  note: text('note'),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type CapitalTransaction = typeof capitalTransactions.$inferSelect;
+export type NewCapitalTransaction = typeof capitalTransactions.$inferInsert;
+export type TransactionType = (typeof transactionTypeEnum.enumValues)[number];
 

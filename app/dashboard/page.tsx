@@ -20,6 +20,9 @@ import {
   rMultipleDistribution,
   computeRollingStats,
   computeNetPnl,
+  computeTotalDeposits,
+  computeTotalWithdrawals,
+  computeNetCapitalCashflow,
 } from '@/lib/stats';
 import { EdgeScoreGauge } from '@/components/dashboard/edge-score-gauge';
 import { DisciplineChecklist } from '@/components/dashboard/discipline-checklist';
@@ -110,6 +113,27 @@ export default async function DashboardPage() {
     : STARTING_BALANCE_DEFAULT;
   const breakevenThreshold = resolveBreakevenThreshold(settingsRow?.breakeven_threshold);
 
+  // Fetch user's capital transactions (deposits & withdrawals)
+  let rawCapitalTxs: any[] = [];
+  try {
+    const res = await supabase
+      .from('capital_transactions')
+      .select('id, type, amount, date, broker_name, note')
+      .eq('user_id', user.id);
+    if (res.data) rawCapitalTxs = res.data;
+  } catch (err) {
+    console.warn('Could not fetch capital_transactions:', err);
+  }
+
+  const capitalTransactions = rawCapitalTxs.map((t: any) => ({
+    id: t.id,
+    type: t.type as 'deposit' | 'withdrawal',
+    amount: Number(t.amount),
+    date: t.date,
+    brokerName: t.broker_name,
+    note: t.note,
+  }));
+
   const trades: StatTrade[] = ((rawTrades ?? []) as Array<{
     id: string;
     pnl: string | null;
@@ -173,8 +197,8 @@ export default async function DashboardPage() {
   const avgR = averageR(trades);
   
   const pnlSeries = cumulativePnlSeries(trades);
-  // Account equity curve: starting capital + running cumulative P&L.
-  const equityData = equitySeries(trades, startingBalance);
+  // Account equity curve: starting capital + running cumulative P&L + cashflows.
+  const equityData = equitySeries(trades, startingBalance, capitalTransactions);
   const distributionData = rMultipleDistribution(trades);
 
   // Find start date from trade history or default to 2024-01-01
@@ -292,6 +316,10 @@ export default async function DashboardPage() {
           data={equityData}
           startingBalance={startingBalance}
           empty={empty}
+          netCashflow={computeNetCapitalCashflow(capitalTransactions)}
+          totalDeposits={computeTotalDeposits(capitalTransactions)}
+          totalWithdrawals={computeTotalWithdrawals(capitalTransactions)}
+          capitalTransactions={capitalTransactions}
         />
       </div>
 
@@ -304,6 +332,7 @@ export default async function DashboardPage() {
           userReturnSeries={userReturnSeries} 
           spyReturnSeries={spyReturnSeries} 
           currentStats={currentStats} 
+          capitalTransactions={capitalTransactions}
         />
         <MoodChart data={moodData} />
       </div>

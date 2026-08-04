@@ -191,24 +191,9 @@ export async function handleSearchJournal(userId: string, args: any) {
   return entries;
 }
 
-const LEVELS = [
-  { level: 0, rank: "Novice Cadet", target: 150, risk: 15 },
-  { level: 1, rank: "Market Apprentice", target: 300, risk: 30 },
-  { level: 2, rank: "Risk Practitioner", target: 600, risk: 60 },
-  { level: 3, rank: "Discipline Enforcer", target: 1200, risk: 120 },
-  { level: 4, rank: "Trend Navigator", target: 2400, risk: 240 },
-  { level: 5, rank: "Capital Guardian", target: 4800, risk: 480 },
-  { level: 6, rank: "Edge Specialist", target: 9600, risk: 960 },
-  { level: 7, rank: "Sovereign Trader", target: 19200, risk: 1920 },
-  { level: 8, rank: "Tactical Veteran", target: 38400, risk: 3840 },
-  { level: 9, rank: "Market Operator", target: 76800, risk: 7680 },
-  { level: 10, rank: "Portfolio Architect", target: 153600, risk: 15360 },
-  { level: 11, rank: "Apex Strategist", target: 307200, risk: 30720 },
-  { level: 12, rank: "Macro Voyager", target: 614400, risk: 61440 },
-  { level: 13, rank: "Market Legend", target: 1000000, risk: 100000 }
-];
-
 export async function handleGetRankProgression(userId: string) {
+  const { LEVELS, resolveActiveLevel } = await import('@/lib/levels');
+
   if (!db) {
     return {
       startingBalance: STARTING_BALANCE_DEFAULT,
@@ -223,8 +208,14 @@ export async function handleGetRankProgression(userId: string) {
     };
   }
 
+  const { trades, userSettings, capitalTransactions } = await import('@/db/schema');
+  const { computeNetPnl, computeNetCapitalCashflow } = await import('@/lib/stats');
+
   const settingsRow = await db
-    .select({ startingBalance: userSettings.startingBalance })
+    .select({
+      startingBalance: userSettings.startingBalance,
+      highestAchievedLevel: userSettings.highestAchievedLevel,
+    })
     .from(userSettings)
     .where(eq(userSettings.userId, userId))
     .limit(1)
@@ -233,6 +224,32 @@ export async function handleGetRankProgression(userId: string) {
   const startingBalance = settingsRow?.startingBalance
     ? Number(settingsRow.startingBalance)
     : STARTING_BALANCE_DEFAULT;
+
+  const storedHighestLevel = settingsRow?.highestAchievedLevel ?? 0;
+
+  let txRows: any[] = [];
+  try {
+    txRows = await db
+      .select({
+        id: capitalTransactions.id,
+        type: capitalTransactions.type,
+        amount: capitalTransactions.amount,
+        date: capitalTransactions.date,
+      })
+      .from(capitalTransactions)
+      .where(eq(capitalTransactions.userId, userId));
+  } catch (err) {
+    console.warn('copilot-db capital_transactions query failed:', err);
+  }
+
+  const statTx = txRows.map((t) => ({
+    id: t.id,
+    type: t.type,
+    amount: Number(t.amount),
+    date: t.date ? new Date(t.date).toISOString() : new Date().toISOString(),
+  }));
+
+  const netCashflow = computeNetCapitalCashflow(statTx);
 
   const tradesRows = await db
     .select({
@@ -259,19 +276,33 @@ export async function handleGetRankProgression(userId: string) {
     }
   }
 
-  const currentBalance = startingBalance + totalClosedNetPnl;
+  const currentBalance = startingBalance + netCashflow + totalClosedNetPnl;
 
-  let activeLevelIdx = 0;
-  for (let i = 0; i < LEVELS.length; i++) {
-    if (currentBalance >= LEVELS[i].target) {
-      activeLevelIdx = i;
-    } else {
-      break;
+  const resolved = resolveActiveLevel(currentBalance, storedHighestLevel);
+  const activeLevelIdx = resolved.activeLevelIdx;
+  const currentLevel = resolved.activeLevel;
+  const nextLevel = resolved.nextLevel;
+
+  if (resolved.newHighestAchieved) {
+    try {
+      await db
+        .insert(userSettings)
+        .values({
+          userId: userId,
+          highestAchievedLevel: activeLevelIdx,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: userSettings.userId,
+          set: {
+            highestAchievedLevel: activeLevelIdx,
+            updatedAt: new Date(),
+          },
+        });
+    } catch (e) {
+      console.warn('Failed to update highestAchievedLevel in copilot-db:', e);
     }
   }
-
-  const currentLevel = LEVELS[activeLevelIdx];
-  const nextLevel = activeLevelIdx < LEVELS.length - 1 ? LEVELS[activeLevelIdx + 1] : null;
 
   let progressPercentage = 100;
   if (nextLevel) {

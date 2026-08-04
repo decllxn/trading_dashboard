@@ -61,19 +61,25 @@ export default async function DashboardLayout({
 
   // Calculate starting balance and current net equity for rank progression
   const { db } = await import('@/db');
-  const { trades, userSettings } = await import('@/db/schema');
+  const { trades, userSettings, capitalTransactions } = await import('@/db/schema');
   const { eq } = await import('drizzle-orm');
-  const { computeNetPnl, STARTING_BALANCE_DEFAULT } = await import('@/lib/stats');
+  const { computeNetPnl, STARTING_BALANCE_DEFAULT, computeNetCapitalCashflow, accountEquitySeries } = await import('@/lib/stats');
 
   let startingBalance = STARTING_BALANCE_DEFAULT;
   let currentBalance = STARTING_BALANCE_DEFAULT;
 
   let totalClosedNetPnl = 0;
-  const pnlPoints: Array<{ time: string; value: number }> = [];
+  let netCashflow = 0;
+  let pnlPoints: Array<{ time: string; value: number }> = [];
+
+  let highestAchievedLevel = 0;
 
   if (db) {
     const settingsRow = await db
-      .select({ startingBalance: userSettings.startingBalance })
+      .select({
+        startingBalance: userSettings.startingBalance,
+        highestAchievedLevel: userSettings.highestAchievedLevel,
+      })
       .from(userSettings)
       .where(eq(userSettings.userId, user.id))
       .limit(1)
@@ -82,6 +88,7 @@ export default async function DashboardLayout({
     startingBalance = settingsRow?.startingBalance
       ? Number(settingsRow.startingBalance)
       : STARTING_BALANCE_DEFAULT;
+    highestAchievedLevel = settingsRow?.highestAchievedLevel ?? 0;
 
     const tradesRows = await db
       .select({
@@ -96,34 +103,79 @@ export default async function DashboardLayout({
       .from(trades)
       .where(eq(trades.userId, user.id));
 
-    // Sort closed trades chronologically to build equity series
-    const closedTrades = tradesRows
-      .filter((t) => t.status === 'closed')
-      .sort((a, b) => {
-        const dateA = a.exitTime ? new Date(a.exitTime).getTime() : a.entryTime ? new Date(a.entryTime).getTime() : 0;
-        const dateB = b.exitTime ? new Date(b.exitTime).getTime() : b.entryTime ? new Date(b.entryTime).getTime() : 0;
-        return dateA - dateB;
-      });
+    let txRows: any[] = [];
+    try {
+      txRows = await db
+        .select({
+          id: capitalTransactions.id,
+          type: capitalTransactions.type,
+          amount: capitalTransactions.amount,
+          date: capitalTransactions.date,
+          brokerName: capitalTransactions.brokerName,
+          note: capitalTransactions.note,
+        })
+        .from(capitalTransactions)
+        .where(eq(capitalTransactions.userId, user.id));
+    } catch (err) {
+      console.warn('capital_transactions table query failed:', err);
+    }
 
-    let runningEquity = startingBalance;
-    pnlPoints.push({ time: 'Start', value: runningEquity });
+    const statTx = txRows.map((t) => ({
+      id: t.id,
+      type: t.type,
+      amount: Number(t.amount),
+      date: t.date ? new Date(t.date).toISOString() : new Date().toISOString(),
+      brokerName: t.brokerName,
+      note: t.note,
+    }));
 
-    for (const t of closedTrades) {
-      const gross = t.pnl ? Number(t.pnl) : 0;
-      const commission = t.commission ? Number(t.commission) : 0;
-      const swap = t.swap ? Number(t.swap) : 0;
-      const fees = t.fees ? Number(t.fees) : 0;
-      const netPnl = computeNetPnl(gross, commission, swap, fees);
-      if (netPnl !== null) {
-        totalClosedNetPnl += netPnl;
-        runningEquity += netPnl;
-        const timeVal = t.exitTime || t.entryTime;
-        const timeStr = timeVal ? new Date(timeVal).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
-        pnlPoints.push({ time: timeStr, value: runningEquity });
+    netCashflow = computeNetCapitalCashflow(statTx);
+
+    const statTrades = tradesRows.map((t) => ({
+      pnl: computeNetPnl(
+        t.pnl ? Number(t.pnl) : null,
+        t.commission ? Number(t.commission) : null,
+        t.swap ? Number(t.swap) : null,
+        t.fees ? Number(t.fees) : null,
+      ),
+      status: t.status,
+      entryTime: t.entryTime ? new Date(t.entryTime).toISOString() : null,
+      exitTime: t.exitTime ? new Date(t.exitTime).toISOString() : null,
+    }));
+
+    for (const st of statTrades) {
+      if (st.status === 'closed' && st.pnl != null) {
+        totalClosedNetPnl += st.pnl;
       }
     }
 
-    currentBalance = startingBalance + totalClosedNetPnl;
+    const eqPoints = accountEquitySeries(statTrades, startingBalance, statTx);
+    pnlPoints = [{ time: 'Start', value: startingBalance }, ...eqPoints.map((p) => ({ time: p.time, value: p.value }))];
+    currentBalance = startingBalance + netCashflow + totalClosedNetPnl;
+
+    const { computePeakLevelFromEquity } = await import('@/lib/levels');
+    const peakHistLevel = computePeakLevelFromEquity(eqPoints, startingBalance);
+    if (peakHistLevel > highestAchievedLevel) {
+      highestAchievedLevel = peakHistLevel;
+      try {
+        await db
+          .insert(userSettings)
+          .values({
+            userId: user.id,
+            highestAchievedLevel: peakHistLevel,
+            updatedAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: userSettings.userId,
+            set: {
+              highestAchievedLevel: peakHistLevel,
+              updatedAt: new Date(),
+            },
+          });
+      } catch (err) {
+        console.warn('Failed to update highestAchievedLevel in layout:', err);
+      }
+    }
   }
 
   // Persistent app shell: rail + (top bar + signal strip + content).
@@ -137,6 +189,7 @@ export default async function DashboardLayout({
               email={user.email ?? ''} 
               activeBrokerName={activeBrokerName} 
               currentBalance={currentBalance}
+              highestAchievedLevel={highestAchievedLevel}
             />
             <SignalStrip 
               startingBalance={startingBalance}

@@ -3,29 +3,7 @@
 import React from 'react';
 import { ChevronDown, Trophy } from 'lucide-react';
 import { AccountMenu } from './account-menu';
-
-interface Level {
-  level: number;
-  rank: string;
-  target: number;
-}
-
-const LEVELS: Level[] = [
-  { level: 0, rank: "Novice Cadet", target: 150 },
-  { level: 1, rank: "Market Apprentice", target: 300 },
-  { level: 2, rank: "Risk Practitioner", target: 600 },
-  { level: 3, rank: "Discipline Enforcer", target: 1200 },
-  { level: 4, rank: "Trend Navigator", target: 2400 },
-  { level: 5, rank: "Capital Guardian", target: 4800 },
-  { level: 6, rank: "Edge Specialist", target: 9600 },
-  { level: 7, rank: "Sovereign Trader", target: 19200 },
-  { level: 8, rank: "Tactical Veteran", target: 38400 },
-  { level: 9, rank: "Market Operator", target: 76800 },
-  { level: 10, rank: "Portfolio Architect", target: 153600 },
-  { level: 11, rank: "Apex Strategist", target: 307200 },
-  { level: 12, rank: "Macro Voyager", target: 614400 },
-  { level: 13, rank: "Market Legend", target: 1000000 }
-];
+import { resolveActiveLevel } from '@/lib/levels';
 
 function Selector({ label }: { label: string }) {
   return (
@@ -43,22 +21,15 @@ interface TopBarProps {
   email: string;
   activeBrokerName?: string | null;
   currentBalance?: number;
+  highestAchievedLevel?: number;
 }
 
-export function TopBar({ email, activeBrokerName, currentBalance }: TopBarProps) {
+export function TopBar({ email, activeBrokerName, currentBalance, highestAchievedLevel = 0 }: TopBarProps) {
   // Rank calculations
   const balance = currentBalance ?? 150;
-  let activeLevelIdx = 0;
-  for (let i = 0; i < LEVELS.length; i++) {
-    if (balance >= LEVELS[i].target) {
-      activeLevelIdx = i;
-    } else {
-      break;
-    }
-  }
-
-  const currentLevel = LEVELS[activeLevelIdx];
-  const nextLevel = activeLevelIdx < LEVELS.length - 1 ? LEVELS[activeLevelIdx + 1] : null;
+  const resolved = resolveActiveLevel(balance, highestAchievedLevel);
+  const currentLevel = resolved.activeLevel;
+  const nextLevel = resolved.nextLevel;
 
   let progressPct = 100;
   if (nextLevel) {
