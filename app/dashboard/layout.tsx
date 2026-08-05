@@ -197,7 +197,7 @@ export default async function DashboardLayout({
               pnlPoints={pnlPoints}
             />
           </div>
-          <main className="no-scrollbar min-w-0 flex-1 overflow-y-auto pb-16 md:pb-0">{children}</main>
+          <main className="no-scrollbar min-w-0 flex-1 overflow-y-auto pb-20 md:pb-0">{children}</main>
         </div>
       </div>
     </CopilotProvider>

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ChevronDown, Trophy } from 'lucide-react';
+import { ChevronDown, LayoutGrid, Trophy } from 'lucide-react';
 import { AccountMenu } from './account-menu';
 import { resolveActiveLevel } from '@/lib/levels';
 
@@ -82,7 +82,17 @@ export function TopBar({ email, activeBrokerName, currentBalance, highestAchieve
         </div>
       )}
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3.5 sm:gap-4">
+        {/* Mobile Nav Drawer Trigger */}
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new CustomEvent('open-mobile-nav'))}
+          className="flex md:hidden items-center justify-center h-8 w-8 rounded-card border border-hairline/80 bg-surface/60 text-secondary hover:text-primary transition-colors duration-150"
+          aria-label="Open mobile navigation menu"
+        >
+          <LayoutGrid size={15} strokeWidth={1.75} />
+        </button>
+
         {/* Static placeholder selectors */}
         <div className="hidden items-center gap-4 md:flex">
           <Selector label={activeBrokerName || "Paper · Alpaca"} />
