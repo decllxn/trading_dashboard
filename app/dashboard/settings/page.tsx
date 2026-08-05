@@ -5,6 +5,7 @@ import { createServerClient } from '@/lib/supabase';
 import { resolveStartingBalance, resolveBreakevenThreshold } from '@/lib/stats';
 import { ConnectBrokerModal } from '@/components/settings/connect-broker-modal';
 import { PurgeDetailsButton } from '@/components/settings/purge-details-button';
+import { JournalPinSettings } from '@/components/settings/journal-pin-settings';
 
 interface SettingsPageProps {
   searchParams: { broker?: string };
@@ -66,7 +67,7 @@ export default async function SettingsPage({
   const { data: settingsRow } = supabase
     ? await supabase
         .from('user_settings')
-        .select('starting_balance, breakeven_threshold')
+        .select('starting_balance, breakeven_threshold, journal_pin')
         .maybeSingle()
     : { data: null };
   const startingBalanceValue = String(
@@ -79,6 +80,7 @@ export default async function SettingsPage({
       (settingsRow as { breakeven_threshold: string | null } | null)?.breakeven_threshold ?? null,
     ),
   );
+  const hasPin = Boolean((settingsRow as { journal_pin?: string | null } | null)?.journal_pin);
   const brokerMessage = searchParams.broker
     ? brokerMessages[searchParams.broker]
     : undefined;
@@ -182,6 +184,8 @@ export default async function SettingsPage({
           <StartingBalanceForm defaultValue={startingBalanceValue} />
         </div>
       </section>
+
+      <JournalPinSettings hasPin={hasPin} />
 
       <section className="mt-6 rounded-card border border-hairline bg-surface">
         <div className="border-b border-hairline p-5">

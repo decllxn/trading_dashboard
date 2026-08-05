@@ -409,6 +409,8 @@ export const userSettings = pgTable('user_settings', {
   highestAchievedLevel: integer('highest_achieved_level')
     .notNull()
     .default(0),
+  // Optional 4-digit PIN hash for locking the journal view
+  journalPin: text('journal_pin'),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),

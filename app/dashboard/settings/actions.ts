@@ -244,5 +244,122 @@ export async function purgeTradeDetails(): Promise<{ success: boolean; count?: n
   }
 }
 
+export async function saveJournalPinAction(
+  pin: string,
+  currentPin?: string
+): Promise<{ success: boolean; error?: string }> {
+  const { hashPin, verifyPin } = await import('@/lib/pin');
+  const supabase = createServerClient();
+  if (!supabase) return { success: false, error: 'Supabase not configured' };
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: 'Unauthorized' };
+
+  if (!/^\d{4}$/.test(pin)) {
+    return { success: false, error: 'PIN must be exactly 4 digits.' };
+  }
+
+  const { data: existingSettings } = await supabase
+    .from('user_settings')
+    .select('journal_pin')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (existingSettings?.journal_pin) {
+    if (!currentPin || !verifyPin(currentPin, existingSettings.journal_pin, user.id)) {
+      return { success: false, error: 'Incorrect current PIN.' };
+    }
+  }
+
+  const hashed = hashPin(pin, user.id);
+
+  const { error } = await supabase
+    .from('user_settings')
+    .upsert(
+      {
+        user_id: user.id,
+        journal_pin: hashed,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id' },
+    );
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  revalidatePath('/dashboard/settings');
+  revalidatePath('/dashboard/journal');
+  return { success: true };
+}
+
+export async function removeJournalPinAction(
+  currentPin: string
+): Promise<{ success: boolean; error?: string }> {
+  const { verifyPin } = await import('@/lib/pin');
+  const supabase = createServerClient();
+  if (!supabase) return { success: false, error: 'Supabase not configured' };
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: 'Unauthorized' };
+
+  const { data: existingSettings } = await supabase
+    .from('user_settings')
+    .select('journal_pin')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (existingSettings?.journal_pin) {
+    if (!currentPin || !verifyPin(currentPin, existingSettings.journal_pin, user.id)) {
+      return { success: false, error: 'Incorrect current PIN.' };
+    }
+  }
+
+  const { error } = await supabase
+    .from('user_settings')
+    .upsert(
+      {
+        user_id: user.id,
+        journal_pin: null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id' },
+    );
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  revalidatePath('/dashboard/settings');
+  revalidatePath('/dashboard/journal');
+  return { success: true };
+}
+
+export async function verifyJournalPinAction(
+  enteredPin: string
+): Promise<{ success: boolean; error?: string }> {
+  const { verifyPin } = await import('@/lib/pin');
+  const supabase = createServerClient();
+  if (!supabase) return { success: false, error: 'Supabase not configured' };
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: 'Unauthorized' };
+
+  const { data: settings } = await supabase
+    .from('user_settings')
+    .select('journal_pin')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (!settings?.journal_pin) {
+    return { success: true };
+  }
+
+  const isValid = verifyPin(enteredPin, settings.journal_pin, user.id);
+  if (!isValid) {
+    return { success: false, error: 'Incorrect PIN' };
+  }
+
+  return { success: true };
+}
+
+
 
 

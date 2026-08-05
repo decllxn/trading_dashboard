@@ -6,8 +6,9 @@ import {
   isSameMonth, isSameDay, isToday, parseISO,
   getDay, startOfWeek, endOfWeek
 } from 'date-fns';
-import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, Lock } from 'lucide-react';
 import { JournalEditor } from '@/components/journal/journal-editor';
+import { JournalPinLock } from '@/components/journal/journal-pin-lock';
 import { saveJournalEntry, linkTradeToJournal, unlinkTradeFromJournal, searchJournalEntries } from './actions';
 import { Segmented } from '@/components/segmented';
 import { cn } from '@/lib/utils';
@@ -43,9 +44,11 @@ interface JournalClientProps {
   trades: TradeData[];
   links: LinkData[];
   emotions: string[];
+  hasPin?: boolean;
 }
 
-export function JournalClient({ entries: initialEntries, trades, links: initialLinks, emotions }: JournalClientProps) {
+export function JournalClient({ entries: initialEntries, trades, links: initialLinks, emotions, hasPin }: JournalClientProps) {
+  const [isLocked, setIsLocked] = useState<boolean>(Boolean(hasPin));
   const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -230,11 +233,28 @@ export function JournalClient({ entries: initialEntries, trades, links: initialL
     }
   };
 
+  if (isLocked && hasPin) {
+    return <JournalPinLock onUnlock={() => setIsLocked(false)} />;
+  }
+
   return (
     <div className="flex min-h-full h-auto lg:h-full flex-col gap-6 lg:flex-row">
       {/* Left Column: Calendar & Search */}
       <div className="w-full shrink-0 flex flex-col gap-6 lg:w-80 lg:no-scrollbar lg:overflow-y-auto">
-        <h1 className="font-display text-primary text-xl">Journal</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="font-display text-primary text-xl">Journal</h1>
+          {hasPin ? (
+            <button
+              type="button"
+              onClick={() => setIsLocked(true)}
+              className="flex items-center gap-1.5 rounded-card border border-hairline/80 bg-surface px-2.5 py-1 text-xs text-secondary transition-colors hover:border-accent-signal hover:text-accent-signal"
+              title="Lock Journal"
+            >
+              <Lock size={13} />
+              Lock
+            </button>
+          ) : null}
+        </div>
         
         {/* Search */}
         <div className="relative">

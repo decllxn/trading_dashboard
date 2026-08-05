@@ -21,7 +21,7 @@ export default async function JournalPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const [{ data: entries }, { data: trades }, { data: links }, { data: emotions }] = await Promise.all([
+  const [{ data: entries }, { data: trades }, { data: links }, { data: emotions }, { data: settings }] = await Promise.all([
     supabase
       .from('journal_entries')
       .select('id, date, content, text_content, mood, mistakes')
@@ -37,7 +37,12 @@ export default async function JournalPage() {
       .from('tags')
       .select('name')
       .eq('category', 'emotion')
+      .eq('user_id', user.id),
+    supabase
+      .from('user_settings')
+      .select('journal_pin')
       .eq('user_id', user.id)
+      .maybeSingle(),
   ]);
 
   const mappedTrades = (trades || []).map((t) => {
@@ -62,6 +67,7 @@ export default async function JournalPage() {
         trades={mappedTrades} 
         links={links || []} 
         emotions={(emotions || []).map(e => e.name)}
+        hasPin={Boolean(settings?.journal_pin)}
       />
     </main>
   );
