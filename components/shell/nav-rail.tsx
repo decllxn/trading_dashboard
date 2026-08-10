@@ -8,6 +8,7 @@ import {
   Bot,
   BookOpen,
   FlaskConical,
+  Flame,
   LayoutDashboard,
   LayoutGrid,
   Settings,
@@ -65,6 +66,13 @@ export const NAV_ITEMS: NavItem[] = [
     icon: BookOpen,
     description: 'Daily notes & psychology reflections',
     match: (p) => p.startsWith('/dashboard/journal'),
+  },
+  {
+    label: 'Punishments',
+    href: '/dashboard/punishments',
+    icon: Flame,
+    description: 'Discipline enforcement, trade logging & essay',
+    match: (p) => p.startsWith('/dashboard/punishments'),
   },
   {
     label: 'Simulations',

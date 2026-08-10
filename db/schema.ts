@@ -549,3 +549,82 @@ export type CapitalTransaction = typeof capitalTransactions.$inferSelect;
 export type NewCapitalTransaction = typeof capitalTransactions.$inferInsert;
 export type TransactionType = (typeof transactionTypeEnum.enumValues)[number];
 
+/**
+ * good_habits — user defined discipline habits and streak counters.
+ */
+export const goodHabits = pgTable('good_habits', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull(),
+  title: text('title').notNull(),
+  streakDays: integer('streak_days').notNull().default(1),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type GoodHabit = typeof goodHabits.$inferSelect;
+export type NewGoodHabit = typeof goodHabits.$inferInsert;
+
+/**
+ * punishments — discipline punishment sessions.
+ */
+export const punishmentStatusEnum = pgEnum('punishment_status', [
+  'active',
+  'completed',
+]);
+
+export const punishments = pgTable('punishments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull(),
+  reason: text('reason').notNull(),
+  taskDescription: text('task_description').notNull(),
+  targetTradeCount: integer('target_trade_count').notNull().default(30),
+  targetEssayWordCount: integer('target_essay_word_count').notNull().default(3000),
+  essayText: text('essay_text').notNull().default(''),
+  status: punishmentStatusEnum('status').notNull().default('active'),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+});
+
+export type Punishment = typeof punishments.$inferSelect;
+export type NewPunishment = typeof punishments.$inferInsert;
+export type PunishmentStatus = (typeof punishmentStatusEnum.enumValues)[number];
+
+/**
+ * punishment_trades — tedious ICT strategy trade backtest entries logged under a punishment.
+ */
+export const punishmentTrades = pgTable('punishment_trades', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  punishmentId: uuid('punishment_id')
+    .notNull()
+    .references(() => punishments.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull(),
+  pair: text('pair').notNull(),
+  direction: directionEnum('direction').notNull(),
+  timeFormed: timestamp('time_formed', { withTimezone: true }).notNull(),
+  dailyPdArray: text('daily_pd_array').notNull(),
+  entryPdArray: text('entry_pd_array').notNull(),
+  timeTakenToTap: text('time_taken_to_tap').notNull(),
+  entryPrice: numeric('entry_price', { precision: 20, scale: 8 }),
+  stopLoss: numeric('stop_loss', { precision: 20, scale: 8 }),
+  takeProfit: numeric('take_profit', { precision: 20, scale: 8 }),
+  plannedRr: numeric('planned_rr', { precision: 10, scale: 4 }),
+  realizedRr: numeric('realized_rr', { precision: 10, scale: 4 }),
+  pnl: numeric('pnl', { precision: 20, scale: 8 }),
+  timeInDrawdown: text('time_in_drawdown'),
+  killzone: text('killzone'),
+  displacementScore: integer('displacement_score'),
+  liquiditySwept: text('liquidity_swept'),
+  notes: text('notes'),
+  images: jsonb('images').$type<string[]>().default([]),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type PunishmentTrade = typeof punishmentTrades.$inferSelect;
+export type NewPunishmentTrade = typeof punishmentTrades.$inferInsert;
+
+
