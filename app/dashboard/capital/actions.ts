@@ -1,4 +1,3 @@
-'use me';
 'use server';
 
 import { revalidatePath } from 'next/cache';
@@ -6,6 +5,7 @@ import { createServerClient } from '@/lib/supabase';
 import { db } from '@/db';
 import { capitalTransactions } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import { encryptText } from '@/lib/crypto';
 
 export async function addCapitalTransaction(formData: FormData) {
   const supabase = createServerClient();
@@ -19,8 +19,11 @@ export async function addCapitalTransaction(formData: FormData) {
   const type = formData.get('type') as 'deposit' | 'withdrawal';
   const amountStr = formData.get('amount') as string;
   const dateStr = formData.get('date') as string;
-  const brokerName = (formData.get('brokerName') as string)?.trim() || null;
-  const note = (formData.get('note') as string)?.trim() || null;
+  const rawBrokerName = (formData.get('brokerName') as string)?.trim() || null;
+  const rawNote = (formData.get('note') as string)?.trim() || null;
+
+  const brokerName = rawBrokerName ? encryptText(rawBrokerName, user.id) : null;
+  const note = rawNote ? encryptText(rawNote, user.id) : null;
 
   if (!type || (type !== 'deposit' && type !== 'withdrawal')) {
     return { error: 'Invalid transaction type.' };

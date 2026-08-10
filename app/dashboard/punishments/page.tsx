@@ -4,6 +4,7 @@ import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { db } from '@/db';
 import { goodHabits, punishments, punishmentTrades } from '@/db/schema';
 import { eq, desc, and } from 'drizzle-orm';
+import { decryptText, decryptJson } from '@/lib/crypto';
 import { PunishmentsContainer } from './punishments-container';
 
 export const dynamic = 'force-dynamic';
@@ -68,10 +69,10 @@ export default async function PunishmentsPage() {
     }
   }
 
-  // Serialize models into JSON-safe objects
+  // Serialize models into JSON-safe objects with decryption
   const serializedGoodHabits = goodHabitsRows.map((h) => ({
     id: h.id,
-    title: h.title,
+    title: decryptText(h.title, user.id) || '',
     streakDays: h.streakDays,
     createdAt: h.createdAt.toISOString(),
   }));
@@ -79,11 +80,11 @@ export default async function PunishmentsPage() {
   const serializedActivePunishment = activePunishmentRow
     ? {
         id: activePunishmentRow.id,
-        reason: activePunishmentRow.reason,
-        taskDescription: activePunishmentRow.taskDescription,
+        reason: decryptText(activePunishmentRow.reason, user.id) || '',
+        taskDescription: decryptText(activePunishmentRow.taskDescription, user.id) || '',
         targetTradeCount: activePunishmentRow.targetTradeCount,
         targetEssayWordCount: activePunishmentRow.targetEssayWordCount,
-        essayText: activePunishmentRow.essayText,
+        essayText: decryptText(activePunishmentRow.essayText, user.id) || '',
         status: activePunishmentRow.status,
         createdAt: activePunishmentRow.createdAt.toISOString(),
         completedAt: activePunishmentRow.completedAt ? activePunishmentRow.completedAt.toISOString() : null,
@@ -96,31 +97,31 @@ export default async function PunishmentsPage() {
     pair: t.pair,
     direction: t.direction,
     timeFormed: t.timeFormed.toISOString(),
-    dailyPdArray: t.dailyPdArray,
-    entryPdArray: t.entryPdArray,
-    timeTakenToTap: t.timeTakenToTap,
+    dailyPdArray: decryptText(t.dailyPdArray, user.id) || '',
+    entryPdArray: decryptText(t.entryPdArray, user.id) || '',
+    timeTakenToTap: decryptText(t.timeTakenToTap, user.id) || '',
     entryPrice: t.entryPrice,
     stopLoss: t.stopLoss,
     takeProfit: t.takeProfit,
     plannedRr: t.plannedRr,
     realizedRr: t.realizedRr,
     pnl: t.pnl,
-    timeInDrawdown: t.timeInDrawdown,
-    killzone: t.killzone,
+    timeInDrawdown: decryptText(t.timeInDrawdown, user.id),
+    killzone: decryptText(t.killzone, user.id),
     displacementScore: t.displacementScore,
-    liquiditySwept: t.liquiditySwept,
-    notes: t.notes,
-    images: t.images || [],
+    liquiditySwept: decryptText(t.liquiditySwept, user.id),
+    notes: decryptText(t.notes, user.id),
+    images: (Array.isArray(decryptJson(t.images, user.id)) ? decryptJson(t.images, user.id) : []) as string[],
     createdAt: t.createdAt.toISOString(),
   }));
 
   const serializedPastPunishments = pastPunishmentsRows.map((p) => ({
     id: p.id,
-    reason: p.reason,
-    taskDescription: p.taskDescription,
+    reason: decryptText(p.reason, user.id) || '',
+    taskDescription: decryptText(p.taskDescription, user.id) || '',
     targetTradeCount: p.targetTradeCount,
     targetEssayWordCount: p.targetEssayWordCount,
-    essayText: p.essayText,
+    essayText: decryptText(p.essayText, user.id) || '',
     status: p.status,
     createdAt: p.createdAt.toISOString(),
     completedAt: p.completedAt ? p.completedAt.toISOString() : null,

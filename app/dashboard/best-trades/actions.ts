@@ -5,6 +5,7 @@ import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { db } from '@/db';
 import { bestTrades } from '@/db/schema';
 import { and, eq } from 'drizzle-orm';
+import { encryptText, encryptJson } from '@/lib/crypto';
 
 export interface BestTradeFormState {
   errors?: Partial<Record<string, string>>;
@@ -69,10 +70,10 @@ export async function createBestTrade(
       userId: user.id,
       instrument,
       timeFormed: new Date(timeFormedRaw),
-      dailyPdArray: dailyPdArray || null,
-      hourlyPdArray: hourlyPdArray || null,
-      images,
-      notes: notes || null,
+      dailyPdArray: dailyPdArray ? encryptText(dailyPdArray, user.id) : null,
+      hourlyPdArray: hourlyPdArray ? encryptText(hourlyPdArray, user.id) : null,
+      images: encryptJson(images, user.id),
+      notes: notes ? encryptText(notes, user.id) : null,
       wasTaken,
       linkedTradeId,
       rMultiple: rMultiple ? String(Number(rMultiple)) : null,

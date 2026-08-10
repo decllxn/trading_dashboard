@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
+import { encryptText, encryptJson } from '@/lib/crypto';
 import {
   computeRMultiple,
   parseDateTimeLocal,
@@ -212,10 +213,10 @@ export async function createTrade(
       swap: data.swap?.toString() ?? null,
       fees: data.fees?.toString() ?? null,
       r_multiple: rMultiple != null ? String(rMultiple) : null,
-      daily_pd_array: data.dailyPdArray || null,
-      one_hour_pd_array: data.oneHourPdArray || null,
-      thirty_minute_pd_array: data.thirtyMinutePdArray || null,
-      images: data.images,
+      daily_pd_array: data.dailyPdArray ? encryptText(data.dailyPdArray, user.id) : null,
+      one_hour_pd_array: data.oneHourPdArray ? encryptText(data.oneHourPdArray, user.id) : null,
+      thirty_minute_pd_array: data.thirtyMinutePdArray ? encryptText(data.thirtyMinutePdArray, user.id) : null,
+      images: encryptJson(data.images, user.id),
       broker_connection_id: brokerConnectionId,
     })
     .select('id')
@@ -274,10 +275,10 @@ export async function updateTrade(
       swap: data.swap?.toString() ?? null,
       fees: data.fees?.toString() ?? null,
       r_multiple: rMultiple != null ? String(rMultiple) : null,
-      daily_pd_array: data.dailyPdArray || null,
-      one_hour_pd_array: data.oneHourPdArray || null,
-      thirty_minute_pd_array: data.thirtyMinutePdArray || null,
-      images: data.images,
+      daily_pd_array: data.dailyPdArray ? encryptText(data.dailyPdArray, user.id) : null,
+      one_hour_pd_array: data.oneHourPdArray ? encryptText(data.oneHourPdArray, user.id) : null,
+      thirty_minute_pd_array: data.thirtyMinutePdArray ? encryptText(data.thirtyMinutePdArray, user.id) : null,
+      images: encryptJson(data.images, user.id),
     })
     .eq('id', tradeId)
     .select();

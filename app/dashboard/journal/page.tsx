@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { JournalClient } from './journal-client';
 import { computeNetPnl } from '@/lib/stats';
+import { decryptText, decryptJson } from '@/lib/crypto';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,6 +46,15 @@ export default async function JournalPage() {
       .maybeSingle(),
   ]);
 
+  const mappedEntries = (entries || []).map((e) => ({
+    id: e.id,
+    date: e.date,
+    content: decryptJson(e.content, user.id),
+    text_content: decryptText(e.text_content, user.id),
+    mood: decryptText(e.mood, user.id),
+    mistakes: (Array.isArray(decryptJson(e.mistakes, user.id)) ? decryptJson(e.mistakes, user.id) : []) as string[],
+  }));
+
   const mappedTrades = (trades || []).map((t) => {
     const gross = t.pnl != null ? Number(t.pnl) : null;
     const commission = t.commission != null ? Number(t.commission) : null;
@@ -63,7 +73,7 @@ export default async function JournalPage() {
   return (
     <main className="flex min-h-full h-auto lg:h-full flex-col bg-base overflow-y-auto lg:overflow-hidden p-4 sm:p-6">
       <JournalClient 
-        entries={entries || []} 
+        entries={mappedEntries} 
         trades={mappedTrades} 
         links={links || []} 
         emotions={(emotions || []).map(e => e.name)}

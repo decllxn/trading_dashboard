@@ -3,6 +3,7 @@ import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { formatPrice, formatR, formatPnl, rColorClass, calculateTradeRisk, formatRisk, pnlColorClass } from '@/lib/trades';
 import type { AssetClass } from '@/db/schema'; // keep imports clean
 import { computeNetPnl } from '@/lib/stats';
+import { decryptText, decryptJson } from '@/lib/crypto';
 import { cn } from '@/lib/utils';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
@@ -37,13 +38,21 @@ export default async function TradeDetailPage({
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data: trade, error } = await supabase
+  const { data: rawTrade, error } = await supabase
     .from('trades')
     .select('*')
     .eq('id', id)
     .single();
 
-  if (error || !trade) notFound();
+  if (error || !rawTrade) notFound();
+
+  const trade = {
+    ...rawTrade,
+    daily_pd_array: decryptText(rawTrade.daily_pd_array, user.id),
+    one_hour_pd_array: decryptText(rawTrade.one_hour_pd_array, user.id),
+    thirty_minute_pd_array: decryptText(rawTrade.thirty_minute_pd_array, user.id),
+    images: decryptJson(rawTrade.images, user.id) || [],
+  };
 
   // Load user settings for session
   const { data: userSettings } = await supabase
@@ -58,7 +67,14 @@ export default async function TradeDetailPage({
     .select('journal_entries(id, date, mood, text_content)')
     .eq('trade_id', trade.id);
     
-  const linkedEntries = (links || []).map(l => l.journal_entries).filter(Boolean);
+  const linkedEntries = (links || [])
+    .map((l: any) => l.journal_entries)
+    .filter(Boolean)
+    .map((e: any) => ({
+      ...e,
+      mood: decryptText(e.mood, user.id),
+      text_content: decryptText(e.text_content, user.id),
+    }));
 
   const sessionsEnabled = userSettings?.chart_sessions_enabled ?? false;
 

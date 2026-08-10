@@ -5,6 +5,7 @@ import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { db } from '@/db';
 import { goodHabits, punishments, punishmentTrades } from '@/db/schema';
 import { and, eq } from 'drizzle-orm';
+import { encryptText, encryptJson } from '@/lib/crypto';
 
 export interface ActionResponse<T = any> {
   success: boolean;
@@ -33,7 +34,7 @@ export async function createGoodHabit(title: string): Promise<ActionResponse> {
       .insert(goodHabits)
       .values({
         userId: user.id,
-        title: trimmed,
+        title: encryptText(trimmed, user.id)!,
         streakDays: 1,
       })
       .returning();
@@ -136,8 +137,8 @@ export async function startPunishment(formData: FormData): Promise<ActionRespons
       .insert(punishments)
       .values({
         userId: user.id,
-        reason,
-        taskDescription,
+        reason: encryptText(reason, user.id)!,
+        taskDescription: encryptText(taskDescription, user.id)!,
         targetTradeCount: isNaN(targetTradeCount) || targetTradeCount < 1 ? 30 : targetTradeCount,
         targetEssayWordCount: isNaN(targetEssayWordCount) || targetEssayWordCount < 100 ? 3000 : targetEssayWordCount,
         status: 'active',
@@ -164,7 +165,7 @@ export async function saveEssayText(punishmentId: string, essayText: string): Pr
   try {
     await db
       .update(punishments)
-      .set({ essayText })
+      .set({ essayText: encryptText(essayText, user.id)! })
       .where(and(eq(punishments.id, punishmentId), eq(punishments.userId, user.id)));
 
     revalidatePath('/dashboard/punishments');
@@ -289,21 +290,21 @@ export async function logPunishmentTrade(formData: FormData): Promise<ActionResp
       pair,
       direction,
       timeFormed: new Date(timeFormedRaw),
-      dailyPdArray,
-      entryPdArray,
-      timeTakenToTap,
+      dailyPdArray: encryptText(dailyPdArray, user.id)!,
+      entryPdArray: encryptText(entryPdArray, user.id)!,
+      timeTakenToTap: encryptText(timeTakenToTap, user.id)!,
       entryPrice: entryPriceRaw ? String(Number(entryPriceRaw)) : null,
       stopLoss: stopLossRaw ? String(Number(stopLossRaw)) : null,
       takeProfit: takeProfitRaw ? String(Number(takeProfitRaw)) : null,
       plannedRr: plannedRrRaw ? String(Number(plannedRrRaw)) : null,
       realizedRr: realizedRrRaw ? String(Number(realizedRrRaw)) : null,
       pnl: pnlRaw ? String(Number(pnlRaw)) : null,
-      timeInDrawdown: timeInDrawdown || null,
-      killzone: killzone || null,
+      timeInDrawdown: timeInDrawdown ? encryptText(timeInDrawdown, user.id) : null,
+      killzone: killzone ? encryptText(killzone, user.id) : null,
       displacementScore: displacementScoreRaw ? parseInt(displacementScoreRaw, 10) : null,
-      liquiditySwept: liquiditySwept || null,
-      notes: notes || null,
-      images,
+      liquiditySwept: liquiditySwept ? encryptText(liquiditySwept, user.id) : null,
+      notes: notes ? encryptText(notes, user.id) : null,
+      images: encryptJson(images, user.id),
     });
 
     revalidatePath('/dashboard/punishments');

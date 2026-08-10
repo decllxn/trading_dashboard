@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase';
 import { db } from '@/db';
 import { capitalTransactions, trades, userSettings } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import { decryptText } from '@/lib/crypto';
 import {
   computeNetPnl,
   computeTotalDeposits,
@@ -64,8 +65,8 @@ export default async function CapitalPage() {
       type: t.type,
       amount: Number(t.amount),
       date: t.date ? new Date(t.date).toISOString() : new Date().toISOString(),
-      brokerName: t.brokerName,
-      note: t.note,
+      brokerName: decryptText(t.brokerName, user.id),
+      note: decryptText(t.note, user.id),
     }));
 
     const tradeRows = await db
@@ -110,8 +111,8 @@ export default async function CapitalPage() {
       type: t.type,
       amount: Number(t.amount),
       date: t.date,
-      brokerName: t.broker_name,
-      note: t.note,
+      brokerName: decryptText(t.broker_name, user.id),
+      note: decryptText(t.note, user.id),
     }));
 
     const { data: rawTrades } = await supabase

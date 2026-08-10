@@ -4,6 +4,7 @@ import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { db } from '@/db';
 import { bestTrades, trades } from '@/db/schema';
 import { eq, desc } from 'drizzle-orm';
+import { decryptText, decryptJson } from '@/lib/crypto';
 import { BestTradesContainer } from './best-trades-container';
 
 export const dynamic = 'force-dynamic';
@@ -48,15 +49,15 @@ export default async function BestTradesPage() {
     .where(eq(trades.userId, user.id))
     .orderBy(desc(trades.entryTime));
 
-  // Serialize models into stable JSON structures for client components
+  // Serialize models into stable JSON structures for client components with decryption
   const serializedBestTrades = bestTradesRows.map((t) => ({
     id: t.id,
     instrument: t.instrument,
     timeFormed: t.timeFormed.toISOString(),
-    dailyPdArray: t.dailyPdArray,
-    hourlyPdArray: t.hourlyPdArray,
-    images: t.images || [],
-    notes: t.notes,
+    dailyPdArray: decryptText(t.dailyPdArray, user.id),
+    hourlyPdArray: decryptText(t.hourlyPdArray, user.id),
+    images: (Array.isArray(decryptJson(t.images, user.id)) ? decryptJson(t.images, user.id) : []) as string[],
+    notes: decryptText(t.notes, user.id),
     wasTaken: t.wasTaken,
     linkedTradeId: t.linkedTradeId,
     rMultiple: t.rMultiple,

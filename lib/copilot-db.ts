@@ -1,6 +1,7 @@
 import { db } from '../db/index.ts';
 import { trades, tradeTags, tags, journalEntries, userSettings } from '../db/schema.ts';
 import { eq, and, or, ilike, gte, lte, desc, SQL } from 'drizzle-orm';
+import { decryptText, decryptJson } from './crypto.ts';
 import {
   winRate,
   expectancy,
@@ -165,30 +166,37 @@ export async function handleGetTradeStats(userId: string, filters: any) {
   };
 }
 
-// Helper to search journal entries
+// Helper to search journal entries with decryption support
 export async function handleSearchJournal(userId: string, args: any) {
   const { query } = args;
   if (!query) return [];
   if (!db) return [];
 
-  const entries = await db.select({
+  const rawEntries = await db.select({
     id: journalEntries.id,
     date: journalEntries.date,
     mood: journalEntries.mood,
     textContent: journalEntries.textContent,
   })
   .from(journalEntries)
-  .where(and(
-    eq(journalEntries.userId, userId),
-    or(
-      ilike(journalEntries.textContent, `%${query}%`),
-      ilike(journalEntries.mood, `%${query}%`)
-    )
-  ))
+  .where(eq(journalEntries.userId, userId))
   .orderBy(desc(journalEntries.date))
-  .limit(10);
+  .limit(50);
 
-  return entries;
+  const lowerQuery = query.toLowerCase();
+
+  const decryptedEntries = rawEntries.map((e) => ({
+    id: e.id,
+    date: e.date,
+    mood: decryptText(e.mood, userId),
+    textContent: decryptText(e.textContent, userId),
+  }));
+
+  return decryptedEntries.filter((e) => {
+    const textMatch = e.textContent && e.textContent.toLowerCase().includes(lowerQuery);
+    const moodMatch = e.mood && e.mood.toLowerCase().includes(lowerQuery);
+    return textMatch || moodMatch;
+  }).slice(0, 10);
 }
 
 export async function handleGetRankProgression(userId: string) {

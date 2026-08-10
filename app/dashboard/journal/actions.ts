@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createServerClient } from '@/lib/supabase';
+import { encryptText, decryptText, encryptJson, decryptJson } from '@/lib/crypto';
 
 export async function saveJournalEntry(
   date: string,
@@ -16,15 +17,20 @@ export async function saveJournalEntry(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: 'Not authenticated.' };
 
+  const encryptedContent = encryptJson(content, user.id);
+  const encryptedTextContent = encryptText(textContent, user.id);
+  const encryptedMood = mood ? encryptText(mood, user.id) : null;
+  const encryptedMistakes = encryptJson(mistakes, user.id);
+
   const { data, error } = await supabase
     .from('journal_entries')
     .upsert({
       user_id: user.id,
       date,
-      content,
-      text_content: textContent,
-      mood,
-      mistakes,
+      content: encryptedContent,
+      text_content: encryptedTextContent,
+      mood: encryptedMood,
+      mistakes: encryptedMistakes,
     }, { onConflict: 'user_id,date' })
     .select('id')
     .single();
