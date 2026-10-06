@@ -454,10 +454,28 @@ export function CopilotProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+const DEFAULT_COPILOT_CONTEXT: CopilotContextType = {
+  sessions: [],
+  setSessions: () => {},
+  activeSessionId: null,
+  setActiveSessionId: () => {},
+  messages: [],
+  setMessages: () => {},
+  input: '',
+  setInput: () => {},
+  loading: false,
+  loadingMessages: false,
+  sidebarOpen: false,
+  setSidebarOpen: () => {},
+  handleSelectSession: async () => {},
+  handleNewChat: () => {},
+  handleDeleteSession: async () => {},
+  handleSend: async () => {},
+  handleEditPrompt: async () => {},
+  handleCancelRequest: () => {},
+};
+
 export function useCopilot() {
   const context = useContext(CopilotContext);
-  if (context === undefined) {
-    throw new Error('useCopilot must be used within a CopilotProvider');
-  }
-  return context;
+  return context ?? DEFAULT_COPILOT_CONTEXT;
 }

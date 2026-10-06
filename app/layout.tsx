@@ -7,6 +7,7 @@ const spaceGrotesk = Space_Grotesk({
   subsets: ['latin'],
   variable: '--font-display',
   display: 'swap',
+  fallback: ['system-ui', 'sans-serif'],
 });
 
 // Body / UI text — IBM Plex Sans
@@ -15,6 +16,7 @@ const ibmPlexSans = IBM_Plex_Sans({
   weight: ['400', '500', '600'],
   variable: '--font-body',
   display: 'swap',
+  fallback: ['system-ui', 'sans-serif'],
 });
 
 // All numeric data — IBM Plex Mono (paired with .num tabular-nums in globals.css)
@@ -23,6 +25,7 @@ const ibmPlexMono = IBM_Plex_Mono({
   weight: ['400', '500', '600'],
   variable: '--font-mono',
   display: 'swap',
+  fallback: ['monospace'],
 });
 
 export const metadata: Metadata = {

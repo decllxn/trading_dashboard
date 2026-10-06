@@ -7,7 +7,7 @@ import {
 import { NavRail } from '@/components/shell/nav-rail';
 import { TopBar } from '@/components/shell/top-bar';
 import { SignalStrip } from '@/components/shell/signal-strip';
-import { CopilotProvider } from '@/components/copilot/copilot-provider';
+import { ensureDefaultTradingAccount } from '@/lib/trading-accounts';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,7 +62,7 @@ export default async function DashboardLayout({
   // Calculate starting balance and current net equity for rank progression
   const { db } = await import('@/db');
   const { trades, userSettings, capitalTransactions } = await import('@/db/schema');
-  const { eq } = await import('drizzle-orm');
+  const { eq, and } = await import('drizzle-orm');
   const { computeNetPnl, STARTING_BALANCE_DEFAULT, computeNetCapitalCashflow, accountEquitySeries } = await import('@/lib/stats');
 
   let startingBalance = STARTING_BALANCE_DEFAULT;
@@ -73,6 +73,8 @@ export default async function DashboardLayout({
   let pnlPoints: Array<{ time: string; value: number }> = [];
 
   let highestAchievedLevel = 0;
+  let activeAccountId: string | null = null;
+  let activeAccountName: string | null = null;
 
   if (db) {
     const settingsRow = await db
@@ -90,6 +92,20 @@ export default async function DashboardLayout({
       : STARTING_BALANCE_DEFAULT;
     highestAchievedLevel = settingsRow?.highestAchievedLevel ?? 0;
 
+    // Resolve active trading account
+    const activeAccount = await ensureDefaultTradingAccount(
+      user.id,
+      startingBalance,
+      highestAchievedLevel,
+    );
+    if (activeAccount) {
+      activeAccountId = activeAccount.id;
+      activeAccountName = activeAccount.name;
+      // Use the trading account's starting balance and level instead of user_settings
+      startingBalance = Number(activeAccount.startingBalance);
+      highestAchievedLevel = activeAccount.highestAchievedLevel;
+    }
+
     const tradesRows = await db
       .select({
         pnl: trades.pnl,
@@ -101,7 +117,11 @@ export default async function DashboardLayout({
         entryTime: trades.entryTime,
       })
       .from(trades)
-      .where(eq(trades.userId, user.id));
+      .where(
+        activeAccountId
+          ? and(eq(trades.userId, user.id), eq(trades.tradingAccountId, activeAccountId))
+          : eq(trades.userId, user.id)
+      );
 
     let txRows: any[] = [];
     try {
@@ -115,7 +135,11 @@ export default async function DashboardLayout({
           note: capitalTransactions.note,
         })
         .from(capitalTransactions)
-        .where(eq(capitalTransactions.userId, user.id));
+        .where(
+          activeAccountId
+            ? and(eq(capitalTransactions.userId, user.id), eq(capitalTransactions.tradingAccountId, activeAccountId))
+            : eq(capitalTransactions.userId, user.id)
+        );
     } catch (err) {
       console.warn('capital_transactions table query failed:', err);
     }
@@ -158,20 +182,16 @@ export default async function DashboardLayout({
     if (peakHistLevel > highestAchievedLevel) {
       highestAchievedLevel = peakHistLevel;
       try {
-        await db
-          .insert(userSettings)
-          .values({
-            userId: user.id,
-            highestAchievedLevel: peakHistLevel,
-            updatedAt: new Date(),
-          })
-          .onConflictDoUpdate({
-            target: userSettings.userId,
-            set: {
+        if (activeAccountId) {
+          const { tradingAccounts: ta } = await import('@/db/schema');
+          await db
+            .update(ta)
+            .set({
               highestAchievedLevel: peakHistLevel,
               updatedAt: new Date(),
-            },
-          });
+            })
+            .where(eq(ta.id, activeAccountId));
+        }
       } catch (err) {
         console.warn('Failed to update highestAchievedLevel in layout:', err);
       }
@@ -180,27 +200,26 @@ export default async function DashboardLayout({
 
   // Persistent app shell: rail + (top bar + signal strip + content).
   return (
-    <CopilotProvider>
-      <div className="bg-base flex h-[100dvh] w-full overflow-hidden">
-        <NavRail />
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          <div className="z-30 shrink-0">
-            <TopBar 
-              email={user.email ?? ''} 
-              activeBrokerName={activeBrokerName} 
-              currentBalance={currentBalance}
-              highestAchievedLevel={highestAchievedLevel}
-            />
-            <SignalStrip 
-              startingBalance={startingBalance}
-              currentBalance={currentBalance}
-              pnlPoints={pnlPoints}
-            />
-          </div>
-          <main className="no-scrollbar min-w-0 flex-1 overflow-y-auto pb-20 md:pb-0">{children}</main>
+    <div className="bg-base flex h-[100dvh] w-full overflow-hidden">
+      <NavRail />
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="z-30 shrink-0">
+          <TopBar 
+            email={user.email ?? ''} 
+            activeBrokerName={activeBrokerName} 
+            currentBalance={currentBalance}
+            highestAchievedLevel={highestAchievedLevel}
+            activeAccountName={activeAccountName}
+          />
+          <SignalStrip 
+            startingBalance={startingBalance}
+            currentBalance={currentBalance}
+            pnlPoints={pnlPoints}
+          />
         </div>
+        <main className="no-scrollbar min-w-0 flex-1 overflow-y-auto pb-20 md:pb-0">{children}</main>
       </div>
-    </CopilotProvider>
+    </div>
   );
 }
 

@@ -55,18 +55,31 @@ export default async function TradesPage() {
   // any failure there returns the WHOLE trades query as an error with null
   // data — which silently hid every trade (the bug this fixed). Flat queries
   // mean a tag/link problem can never obscure the trades themselves.
+  const { data: activeAcctRow } = await supabase
+    .from('trading_accounts')
+    .select('id')
+    .eq('user_id', user.id)
+    .eq('is_active', true)
+    .maybeSingle();
+  const activeAccountId = activeAcctRow?.id ?? null;
+
+  let tradesQuery = supabase
+    .from('trades')
+    .select(
+      'id, instrument, asset_class, direction, entry_price, exit_price, size, stop_price, target_price, entry_time, exit_time, pnl, commission, swap, fees, r_multiple, status, daily_pd_array, one_hour_pd_array, thirty_minute_pd_array, images, pretrade_checklist',
+    )
+    .eq('user_id', user.id);
+  
+  if (activeAccountId) {
+    tradesQuery = tradesQuery.eq('trading_account_id', activeAccountId);
+  }
+  
   let [
     { data: rawTrades, error: tradesError },
     { data: rawTags },
     { data: rawTradeTags },
   ] = await Promise.all([
-    supabase
-      .from('trades')
-      .select(
-        'id, instrument, asset_class, direction, entry_price, exit_price, size, stop_price, target_price, entry_time, exit_time, pnl, commission, swap, fees, r_multiple, status, daily_pd_array, one_hour_pd_array, thirty_minute_pd_array, images, pretrade_checklist',
-      )
-      .eq('user_id', user.id)
-      .order('entry_time', { ascending: false, nullsFirst: false }),
+    tradesQuery.order('entry_time', { ascending: false, nullsFirst: false }),
     supabase
       .from('tags')
       .select('id, name, category')
@@ -79,13 +92,18 @@ export default async function TradesPage() {
 
   // If pretrade_checklist column is missing in Supabase DB, fallback to selecting without it
   if (tradesError && tradesError.message?.includes('pretrade_checklist')) {
-    const retry = await supabase
+    let retryQuery = supabase
       .from('trades')
       .select(
         'id, instrument, asset_class, direction, entry_price, exit_price, size, stop_price, target_price, entry_time, exit_time, pnl, commission, swap, fees, r_multiple, status, daily_pd_array, one_hour_pd_array, thirty_minute_pd_array, images',
       )
-      .eq('user_id', user.id)
-      .order('entry_time', { ascending: false, nullsFirst: false });
+      .eq('user_id', user.id);
+      
+    if (activeAccountId) {
+      retryQuery = retryQuery.eq('trading_account_id', activeAccountId);
+    }
+    
+    const retry = await retryQuery.order('entry_time', { ascending: false, nullsFirst: false });
 
     rawTrades = retry.data as any;
     tradesError = retry.error;

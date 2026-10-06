@@ -190,12 +190,21 @@ export async function createTrade(
 
   const brokerConnectionId = activeConnection ? activeConnection.id : null;
 
+  const { data: activeAcctRow } = await supabase
+    .from('trading_accounts')
+    .select('id')
+    .eq('user_id', user.id)
+    .eq('is_active', true)
+    .maybeSingle();
+  const activeAccountId = activeAcctRow?.id ?? null;
+
   const rMultiple = computeRMultiple(data.entryPrice!, data.stopPrice, data.exitPrice, data.direction);
 
   const { data: tradeRow, error: tradeError } = await supabase
     .from('trades')
     .insert({
       user_id: user.id,
+      trading_account_id: activeAccountId,
       instrument: data.instrument,
       asset_class: data.assetClass,
       direction: data.direction,
@@ -406,10 +415,19 @@ export async function createLiveTrade(data: {
   const isForex = cleanInst.includes('/') || ['USDCAD', 'EURUSD', 'GBPUSD', 'AUDUSD', 'USDJPY', 'XAUUSD'].includes(cleanInst);
   const assetClass: AssetClass = isForex ? 'forex' : 'equity';
 
+  const { data: activeAcctRow } = await supabase
+    .from('trading_accounts')
+    .select('id')
+    .eq('user_id', user.id)
+    .eq('is_active', true)
+    .maybeSingle();
+  const activeAccountId = activeAcctRow?.id ?? null;
+
   const { error } = await supabase
     .from('trades')
     .insert({
       user_id: user.id,
+      trading_account_id: activeAccountId,
       instrument: data.instrument.trim(),
       asset_class: assetClass,
       direction: data.direction,

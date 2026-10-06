@@ -40,6 +40,7 @@ export function BestTradeForm({ tradesList, onSuccess, onCancel }: BestTradeForm
   );
 
   const [wasTaken, setWasTaken] = useState<'yes' | 'no'>('no');
+  const [htfTimeframe, setHtfTimeframe] = useState<string>('Daily');
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
@@ -172,11 +173,25 @@ export function BestTradeForm({ tradesList, onSuccess, onCancel }: BestTradeForm
 
       {/* PD Arrays */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field id="dailyPdArray" label="Daily PD Array" error={state.errors?.dailyPdArray}>
+        <Field id="dailyPdArray" label={
+          <span className="flex items-center gap-2">
+            <select
+              value={htfTimeframe}
+              onChange={(e) => setHtfTimeframe(e.target.value)}
+              className="bg-surface-raised border border-hairline rounded px-1.5 py-0 text-xs text-primary font-display focus:outline-none focus:ring-1 focus:ring-accent-signal cursor-pointer"
+            >
+              <option value="Daily">Daily</option>
+              <option value="Weekly">Weekly</option>
+              <option value="4H">4H</option>
+              <option value="1H">1H</option>
+            </select>
+            <span>PD Array</span>
+          </span>
+        } error={state.errors?.dailyPdArray}>
           <Input
             id="dailyPdArray"
             name="dailyPdArray"
-            placeholder="e.g. 1D FVG, Daily OB"
+            placeholder={`e.g. ${htfTimeframe} FVG, ${htfTimeframe} OB`}
             defaultValue={state.values?.dailyPdArray}
             autoComplete="off"
           />

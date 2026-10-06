@@ -19,12 +19,13 @@ function Selector({ label }: { label: string }) {
 
 interface TopBarProps {
   email: string;
+  activeAccountName?: string | null;
   activeBrokerName?: string | null;
   currentBalance?: number;
   highestAchievedLevel?: number;
 }
 
-export function TopBar({ email, activeBrokerName, currentBalance, highestAchievedLevel = 0 }: TopBarProps) {
+export function TopBar({ email, activeAccountName, activeBrokerName, currentBalance, highestAchievedLevel = 0 }: TopBarProps) {
   // Rank calculations
   const balance = currentBalance ?? 150;
   const resolved = resolveActiveLevel(balance, highestAchievedLevel);
@@ -52,7 +53,15 @@ export function TopBar({ email, activeBrokerName, currentBalance, highestAchieve
           <div className="flex items-center gap-1.5 text-secondary">
             <Trophy size={11} className="text-accent-signal" />
             <span className="font-display text-[9px] uppercase tracking-wider text-tertiary">Rank:</span>
-            <span className="font-display text-primary font-semibold uppercase tracking-wider">{currentLevel.rank}</span>
+            <span className="font-display text-primary font-semibold uppercase tracking-wider">
+              {activeAccountName && activeAccountName !== 'Main Account' && (
+                <>
+                  <span className="text-accent-signal">{activeAccountName}</span>
+                  <span className="text-tertiary mx-1">·</span>
+                </>
+              )}
+              {currentLevel.rank}
+            </span>
           </div>
 
           <span className="border-hairline h-3 border-l" />

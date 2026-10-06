@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently -k -s first \"next dev\" \"pnpm sim:start\"",
-    "dev:clean": "powershell -Command \"Stop-Process -Id (Get-NetTCPConnection -LocalPort 3000,8000 -ErrorAction SilentlyContinue).OwningProcess -Force -ErrorAction SilentlyContinue; Write-Host 'Cleared ports 3000 and 8000 successfully'\"",
+    "dev": "concurrently -k -s first \"next dev\" \"pnpm sim:start\" \"pnpm ctrader:start\"",
+    "dev:clean": "powershell -Command \"Stop-Process -Id (Get-NetTCPConnection -LocalPort 3000,8000,8001 -ErrorAction SilentlyContinue).OwningProcess -Force -ErrorAction SilentlyContinue; Write-Host 'Cleared ports 3000, 8000 and 8001 successfully'\"",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -13,7 +13,8 @@
     "db:studio": "drizzle-kit studio",
     "db:generate": "drizzle-kit generate",
     "test": "node --test --experimental-strip-types",
-    "sim:start": "cd simulation-service && .venv\\Scripts\\uvicorn main:app --port 8000"
+    "sim:start": "cd simulation-service && .venv\\Scripts\\uvicorn main:app --port 8000",
+    "ctrader:start": "cd ctrader-service && .venv\\Scripts\\uvicorn main:app --port 8001"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",

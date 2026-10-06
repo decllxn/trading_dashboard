@@ -66,6 +66,15 @@ export async function createBestTrade(
   }
 
   try {
+    let activeAccountId: string | null = null;
+    const { data: activeAcct } = await supabase
+      .from('trading_accounts')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .maybeSingle();
+    activeAccountId = activeAcct?.id ?? null;
+
     await db.insert(bestTrades).values({
       userId: user.id,
       instrument,
@@ -77,6 +86,7 @@ export async function createBestTrade(
       wasTaken,
       linkedTradeId,
       rMultiple: rMultiple ? String(Number(rMultiple)) : null,
+      tradingAccountId: activeAccountId,
     });
 
     revalidatePath('/dashboard/best-trades');

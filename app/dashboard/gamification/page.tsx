@@ -2,8 +2,9 @@ import React from 'react';
 import { redirect } from 'next/navigation';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { db } from '@/db';
-import { trades, userSettings } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { trades, userSettings, tradingAccounts } from '@/db/schema';
+import { eq, and } from 'drizzle-orm';
+import { ensureDefaultTradingAccount } from '@/lib/trading-accounts';
 import { computeNetPnl, STARTING_BALANCE_DEFAULT } from '@/lib/stats';
 import { GamificationContainer } from './gamification-container';
 
@@ -40,11 +41,24 @@ export default async function GamificationPage() {
     .limit(1)
     .then((rows) => rows[0]);
 
-  const startingBalance = settingsRow?.startingBalance
+  let startingBalance = settingsRow?.startingBalance
     ? Number(settingsRow.startingBalance)
     : STARTING_BALANCE_DEFAULT;
 
-  const storedHighestLevel = settingsRow?.highestAchievedLevel ?? 0;
+  let storedHighestLevel = settingsRow?.highestAchievedLevel ?? 0;
+
+  // Resolve active trading account — use its values over user_settings
+  const activeAccount = await ensureDefaultTradingAccount(
+    user.id,
+    startingBalance,
+    storedHighestLevel,
+  );
+  let activeAccountId: string | null = null;
+  if (activeAccount) {
+    activeAccountId = activeAccount.id;
+    startingBalance = Number(activeAccount.startingBalance);
+    storedHighestLevel = activeAccount.highestAchievedLevel;
+  }
 
   // Fetch capital transactions for net cashflow
   const { capitalTransactions } = await import('@/db/schema');
@@ -59,7 +73,11 @@ export default async function GamificationPage() {
         date: capitalTransactions.date,
       })
       .from(capitalTransactions)
-      .where(eq(capitalTransactions.userId, user.id));
+      .where(
+        activeAccountId
+          ? and(eq(capitalTransactions.userId, user.id), eq(capitalTransactions.tradingAccountId, activeAccountId))
+          : eq(capitalTransactions.userId, user.id)
+      );
   } catch (e) {
     // optional table fallback
   }
@@ -84,7 +102,11 @@ export default async function GamificationPage() {
       exitTime: trades.exitTime,
     })
     .from(trades)
-    .where(eq(trades.userId, user.id));
+    .where(
+      activeAccountId
+        ? and(eq(trades.userId, user.id), eq(trades.tradingAccountId, activeAccountId))
+        : eq(trades.userId, user.id)
+    );
 
   const { accountEquitySeries } = await import('@/lib/stats');
   const statTrades = tradesRows.map((t) => ({
@@ -119,20 +141,30 @@ export default async function GamificationPage() {
 
   if (effectiveHighestLevel > storedHighestLevel) {
     try {
-      await db
-        .insert(userSettings)
-        .values({
-          userId: user.id,
-          highestAchievedLevel: effectiveHighestLevel,
-          updatedAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: userSettings.userId,
-          set: {
+      if (activeAccountId) {
+        await db
+          .update(tradingAccounts)
+          .set({
             highestAchievedLevel: effectiveHighestLevel,
             updatedAt: new Date(),
-          },
-        });
+          })
+          .where(eq(tradingAccounts.id, activeAccountId));
+      } else {
+        await db
+          .insert(userSettings)
+          .values({
+            userId: user.id,
+            highestAchievedLevel: effectiveHighestLevel,
+            updatedAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: userSettings.userId,
+            set: {
+              highestAchievedLevel: effectiveHighestLevel,
+              updatedAt: new Date(),
+            },
+          });
+      }
     } catch (err) {
       console.warn('Failed to update highestAchievedLevel:', err);
     }

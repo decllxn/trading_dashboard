@@ -3,10 +3,10 @@
 import { useRef, useEffect, useState } from 'react';
 import { Plus, MessageSquare, Trash2, Menu, X, Edit3, ChevronLeft, ChevronRight, XCircle, Brain } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useCopilot, type Message } from '@/components/copilot/copilot-provider';
+import { CopilotProvider, useCopilot, type Message } from '@/components/copilot/copilot-provider';
 import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 
-export default function CopilotPage() {
+function CopilotContent() {
   const {
     sessions,
     activeSessionId,
@@ -499,5 +499,13 @@ export default function CopilotPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function CopilotPage() {
+  return (
+    <CopilotProvider>
+      <CopilotContent />
+    </CopilotProvider>
   );
 }

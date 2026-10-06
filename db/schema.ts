@@ -79,6 +79,7 @@ export const tradeSourceEnum = pgEnum('trade_source', [
   'manual',
   'csv',
   'snaptrade',
+  'ctrader',
 ]);
 
 /**
@@ -149,6 +150,17 @@ export const trades = pgTable('trades', {
   thirtyMinutePdArray: text('thirty_minute_pd_array'),
   images: jsonb('images').$type<string[]>().default([]),
   pretradeChecklist: jsonb('pretrade_checklist').$type<{ id: string; text: string; category: string; checked: boolean }[]>().default([]),
+
+  // Trading account scoping. Links this trade to a specific user-defined
+  // trading account (multi-account support). Nullable so existing rows
+  // (created before multi-account) can be backfilled by migration.
+  tradingAccountId: uuid('trading_account_id').references(
+    () => tradingAccounts.id,
+    { onDelete: 'set null' },
+  ),
+
+  // External broker deal or position ID (e.g. cTrader deal ID) for exact deduplication
+  externalTradeId: text('external_trade_id'),
 
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
@@ -283,6 +295,7 @@ export type NewJournalTradeLink = typeof journalTradeLinks.$inferInsert;
 export const brokerProviderEnum = pgEnum('broker_provider', [
   'snaptrade',
   'manual',
+  'ctrader',
 ]);
 
 /**
@@ -495,6 +508,10 @@ export const bestTrades = pgTable('best_trades', {
   wasTaken: boolean('was_taken').notNull().default(false),
   linkedTradeId: uuid('linked_trade_id').references(() => trades.id, { onDelete: 'set null' }),
   rMultiple: numeric('r_multiple', { precision: 10, scale: 4 }),
+  tradingAccountId: uuid('trading_account_id').references(
+    () => tradingAccounts.id,
+    { onDelete: 'set null' },
+  ),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -540,6 +557,10 @@ export const capitalTransactions = pgTable('capital_transactions', {
   date: timestamp('date', { withTimezone: true }).notNull().defaultNow(),
   brokerName: text('broker_name'),
   note: text('note'),
+  tradingAccountId: uuid('trading_account_id').references(
+    () => tradingAccounts.id,
+    { onDelete: 'set null' },
+  ),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -627,4 +648,111 @@ export const punishmentTrades = pgTable('punishment_trades', {
 export type PunishmentTrade = typeof punishmentTrades.$inferSelect;
 export type NewPunishmentTrade = typeof punishmentTrades.$inferInsert;
 
+/**
+ * trading_accounts — user-defined trading account profiles.
+ *
+ * Each account encapsulates an independent trading context: its own starting
+ * balance, rank progression (highest achieved level), and trade history.
+ * Trades, capital transactions, and best trades reference this table via
+ * `trading_account_id`. Only one account is active per user at a time;
+ * switching accounts changes which data the dashboard shows.
+ *
+ * When a user first visits after this migration, a "Main Account" is
+ * auto-created and backfilled with all existing trades.
+ */
+export const tradingAccounts = pgTable('trading_accounts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull(),
+  name: text('name').notNull(),
+  startingBalance: numeric('starting_balance', { precision: 20, scale: 8 }).notNull(),
+  highestAchievedLevel: integer('highest_achieved_level')
+    .notNull()
+    .default(0),
+  isActive: boolean('is_active').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type TradingAccount = typeof tradingAccounts.$inferSelect;
+export type NewTradingAccount = typeof tradingAccounts.$inferInsert;
+
+/**
+ * ctrader_accounts — linked cTrader trading accounts via cTrader Open API.
+ * Tracks account credentials, live balance/equity, currency, and link to
+ * broker_connections and trading_accounts.
+ */
+export const ctraderAccounts = pgTable(
+  'ctrader_accounts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull(),
+    brokerConnectionId: uuid('broker_connection_id').references(
+      () => brokerConnections.id,
+      { onDelete: 'set null' },
+    ),
+    tradingAccountId: uuid('trading_account_id').references(
+      () => tradingAccounts.id,
+      { onDelete: 'set null' },
+    ),
+    ctidTraderAccountId: text('ctid_trader_account_id').notNull(),
+    accountNumber: text('account_number'),
+    brokerTitle: text('broker_title').notNull().default('Pepperstone'),
+    isLive: boolean('is_live').notNull().default(true),
+    currency: text('currency').notNull().default('USD'),
+    balance: numeric('balance', { precision: 20, scale: 8 }),
+    equity: numeric('equity', { precision: 20, scale: 8 }),
+    freeMargin: numeric('free_margin', { precision: 20, scale: 8 }),
+    margin: numeric('margin', { precision: 20, scale: 8 }),
+    leverageInCents: integer('leverage_in_cents'),
+    accessToken: text('access_token'),
+    refreshToken: text('refresh_token'),
+    tokenExpiresAt: timestamp('token_expires_at', { withTimezone: true }),
+    lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique('ctrader_accounts_user_ctid_uidx').on(
+      t.userId,
+      t.ctidTraderAccountId,
+    ),
+  ],
+);
+
+export type CTraderAccount = typeof ctraderAccounts.$inferSelect;
+export type NewCTraderAccount = typeof ctraderAccounts.$inferInsert;
+
+/**
+ * balance_snapshots — telemetry snapshots of balance, equity, and margin over time.
+ */
+export const balanceSnapshots = pgTable('balance_snapshots', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull(),
+  tradingAccountId: uuid('trading_account_id').references(
+    () => tradingAccounts.id,
+    { onDelete: 'set null' },
+  ),
+  ctraderAccountId: uuid('ctrader_account_id')
+    .notNull()
+    .references(() => ctraderAccounts.id, { onDelete: 'cascade' }),
+  balance: numeric('balance', { precision: 20, scale: 8 }).notNull(),
+  equity: numeric('equity', { precision: 20, scale: 8 }).notNull(),
+  margin: numeric('margin', { precision: 20, scale: 8 }),
+  freeMargin: numeric('free_margin', { precision: 20, scale: 8 }),
+  unrealizedPnl: numeric('unrealized_pnl', { precision: 20, scale: 8 }),
+  recordedAt: timestamp('recorded_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type BalanceSnapshot = typeof balanceSnapshots.$inferSelect;
+export type NewBalanceSnapshot = typeof balanceSnapshots.$inferInsert;
 

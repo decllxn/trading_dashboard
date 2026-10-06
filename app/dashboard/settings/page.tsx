@@ -4,16 +4,22 @@ import { BreakevenThresholdForm } from './breakeven-threshold-form';
 import { createServerClient } from '@/lib/supabase';
 import { resolveStartingBalance, resolveBreakevenThreshold } from '@/lib/stats';
 import { ConnectBrokerModal } from '@/components/settings/connect-broker-modal';
+import { CTraderConnectionCard } from '@/components/settings/ctrader-connection-card';
 import { PurgeDetailsButton } from '@/components/settings/purge-details-button';
 import { JournalPinSettings } from '@/components/settings/journal-pin-settings';
+import { TradingAccountsManager } from '@/components/settings/trading-accounts-manager';
+import { tradingAccounts } from '@/db/schema';
+import { db } from '@/db';
+import { eq } from 'drizzle-orm';
+import { ensureDefaultTradingAccount } from '@/lib/trading-accounts';
 
 interface SettingsPageProps {
-  searchParams: { broker?: string };
+  searchParams: { broker?: string; ctrader?: string; error?: string };
 }
 
 interface BrokerConnectionRow {
   id: string;
-  provider: 'snaptrade' | 'manual';
+  provider: 'snaptrade' | 'manual' | 'ctrader';
   external_account_id: string | null;
   broker_name: string;
   status: 'active' | 'error' | 'disconnected';
@@ -64,6 +70,24 @@ export default async function SettingsPage({
       'id, provider, external_account_id, broker_name, status, last_synced_at',
     )
     .order('created_at', { ascending: false });
+
+  const { data: ctraderAccountsRaw } = await supabase
+    .from('ctrader_accounts')
+    .select(
+      'id, ctid_trader_account_id, account_number, broker_title, currency, balance, equity, last_synced_at',
+    )
+    .eq('user_id', user.id);
+
+  const ctraderAccountsList = (ctraderAccountsRaw || []).map((a) => ({
+    id: a.id,
+    ctidTraderAccountId: a.ctid_trader_account_id,
+    accountNumber: a.account_number,
+    brokerTitle: a.broker_title,
+    currency: a.currency,
+    balance: a.balance,
+    equity: a.equity,
+    lastSyncedAt: a.last_synced_at,
+  }));
   const { data: settingsRow } = supabase
     ? await supabase
         .from('user_settings')
@@ -81,6 +105,40 @@ export default async function SettingsPage({
     ),
   );
   const hasPin = Boolean((settingsRow as { journal_pin?: string | null } | null)?.journal_pin);
+
+  // Fetch trading accounts
+  let accountsList: { id: string; name: string; startingBalance: string; isActive: boolean; createdAt: string }[] = [];
+  let activeAccountId: string | null = null;
+  if (db) {
+    // Ensure user has at least a default account
+    await ensureDefaultTradingAccount(
+      user.id,
+      Number(startingBalanceValue),
+      0,
+    );
+
+    const accts = await db
+      .select({
+        id: tradingAccounts.id,
+        name: tradingAccounts.name,
+        startingBalance: tradingAccounts.startingBalance,
+        isActive: tradingAccounts.isActive,
+        createdAt: tradingAccounts.createdAt,
+      })
+      .from(tradingAccounts)
+      .where(eq(tradingAccounts.userId, user.id))
+      .orderBy(tradingAccounts.createdAt);
+
+    accountsList = accts.map((a) => ({
+      id: a.id,
+      name: a.name,
+      startingBalance: a.startingBalance,
+      isActive: a.isActive,
+      createdAt: a.createdAt.toISOString(),
+    }));
+    activeAccountId = accts.find((a) => a.isActive)?.id ?? null;
+  }
+
   const brokerMessage = searchParams.broker
     ? brokerMessages[searchParams.broker]
     : undefined;
@@ -93,6 +151,27 @@ export default async function SettingsPage({
         </p>
         <h1 className="mt-2 font-display text-2xl text-primary">Settings</h1>
       </header>
+
+      <section className="mt-6 rounded-card border border-hairline bg-surface">
+        <div className="border-b border-hairline p-5">
+          <h2 className="font-display text-lg text-primary">
+            Trading Accounts
+          </h2>
+          <p className="mt-1 max-w-2xl text-sm text-secondary">
+            Create separate trading accounts with independent starting balances
+            and rank progression. Switch between accounts to view different
+            trading histories.
+          </p>
+        </div>
+        <div className="p-5">
+          <TradingAccountsManager
+            accounts={accountsList}
+            activeAccountId={activeAccountId}
+          />
+        </div>
+      </section>
+
+      <CTraderConnectionCard accounts={ctraderAccountsList} />
 
       <section className="mt-6 rounded-card border border-hairline bg-surface">
         <div className="flex flex-col gap-4 border-b border-hairline p-5 sm:flex-row sm:items-center sm:justify-between">

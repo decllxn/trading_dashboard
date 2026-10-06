@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { createServerClient } from '@/lib/supabase';
 import { db } from '@/db';
 import { capitalTransactions, trades, userSettings } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { decryptText } from '@/lib/crypto';
 import {
   computeNetPnl,
@@ -28,6 +28,14 @@ export default async function CapitalPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
+  const { data: activeAcctRow } = await supabase
+    .from('trading_accounts')
+    .select('id')
+    .eq('user_id', user.id)
+    .eq('is_active', true)
+    .maybeSingle();
+  const activeAccountId = activeAcctRow?.id ?? null;
+
   let startingBalance = STARTING_BALANCE_DEFAULT;
   let rawTransactions: StatCapitalTransaction[] = [];
   let totalTradingNetPnl = 0;
@@ -44,6 +52,10 @@ export default async function CapitalPage() {
 
     let txRows: any[] = [];
     try {
+      const condition = activeAccountId 
+        ? and(eq(capitalTransactions.userId, user.id), eq(capitalTransactions.tradingAccountId, activeAccountId))
+        : eq(capitalTransactions.userId, user.id);
+
       txRows = await db
         .select({
           id: capitalTransactions.id,
@@ -54,7 +66,7 @@ export default async function CapitalPage() {
           note: capitalTransactions.note,
         })
         .from(capitalTransactions)
-        .where(eq(capitalTransactions.userId, user.id))
+        .where(condition)
         .orderBy(capitalTransactions.date);
     } catch (err) {
       console.warn('capital/page query failed:', err);
@@ -69,6 +81,10 @@ export default async function CapitalPage() {
       note: decryptText(t.note, user.id),
     }));
 
+    const tradesCondition = activeAccountId
+      ? and(eq(trades.userId, user.id), eq(trades.tradingAccountId, activeAccountId))
+      : eq(trades.userId, user.id);
+
     const tradeRows = await db
       .select({
         pnl: trades.pnl,
@@ -78,7 +94,7 @@ export default async function CapitalPage() {
         status: trades.status,
       })
       .from(trades)
-      .where(eq(trades.userId, user.id));
+      .where(tradesCondition);
 
     for (const tr of tradeRows) {
       if (tr.status === 'closed' && tr.pnl != null) {
@@ -100,11 +116,16 @@ export default async function CapitalPage() {
 
     startingBalance = resolveStartingBalance(settingsRow?.starting_balance ?? null);
 
-    const { data: txs } = await supabase
+    let txsQuery = supabase
       .from('capital_transactions')
       .select('id, type, amount, date, broker_name, note')
-      .eq('user_id', user.id)
-      .order('date', { ascending: false });
+      .eq('user_id', user.id);
+      
+    if (activeAccountId) {
+      txsQuery = txsQuery.eq('trading_account_id', activeAccountId);
+    }
+
+    const { data: txs } = await txsQuery.order('date', { ascending: false });
 
     rawTransactions = (txs || []).map((t: any) => ({
       id: t.id,
@@ -115,11 +136,17 @@ export default async function CapitalPage() {
       note: decryptText(t.note, user.id),
     }));
 
-    const { data: rawTrades } = await supabase
+    let tradesQuery = supabase
       .from('trades')
       .select('pnl, commission, swap, fees, status')
       .eq('user_id', user.id)
       .eq('status', 'closed');
+      
+    if (activeAccountId) {
+      tradesQuery = tradesQuery.eq('trading_account_id', activeAccountId);
+    }
+
+    const { data: rawTrades } = await tradesQuery;
 
     for (const tr of rawTrades || []) {
       if (tr.pnl != null) {

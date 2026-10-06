@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/button';
 import { connectBroker, connectMt5Broker } from '@/app/dashboard/settings/actions';
-import { X, Bot, Shield, Key } from 'lucide-react';
+import { X, Bot, Shield, Key, Radio } from 'lucide-react';
 import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 
 export function ConnectBrokerModal({ userId }: { userId: string }) {
@@ -190,6 +190,29 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
                 </p>
 
                 <div className="space-y-3">
+                  {/* Option 0: cTrader Open API */}
+                  <a
+                    href="/api/ctrader/connect"
+                    className="w-full flex items-start gap-3.5 p-4 border border-emerald-500/30 bg-emerald-950/10 hover:border-emerald-500/60 hover:bg-emerald-950/20 rounded-card text-left transition-colors cursor-pointer group"
+                  >
+                    <div className="p-2 border border-emerald-500/30 bg-surface rounded text-emerald-400 group-hover:border-emerald-500/50">
+                      <Radio size={18} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-display text-primary text-xs font-semibold uppercase tracking-wider">
+                          cTrader Open API (Pepperstone)
+                        </h4>
+                        <span className="text-[9px] px-1.5 py-0.2 rounded font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                          LIVE TELEMETRY
+                        </span>
+                      </div>
+                      <p className="text-secondary text-[11px] mt-1 leading-relaxed">
+                        Direct OAuth sync with Pepperstone cTrader. Real-time automatic position &amp; balance telemetry without manually pasting scripts.
+                      </p>
+                    </div>
+                  </a>
+
                   {/* Option 1: Forex MT5 */}
                   <button
                     onClick={() => setStep('mt5')}

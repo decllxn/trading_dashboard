@@ -1,5 +1,5 @@
 import { db } from '../db/index.ts';
-import { trades, tradeTags, tags, journalEntries, userSettings } from '../db/schema.ts';
+import { trades, tradeTags, tags, journalEntries, userSettings, tradingAccounts } from '../db/schema.ts';
 import { eq, and, or, ilike, gte, lte, desc, SQL } from 'drizzle-orm';
 import { decryptText, decryptJson } from './crypto.ts';
 import {
@@ -19,6 +19,15 @@ import {
 // Helper to query and filter trades
 export async function handleGetTrades(userId: string, filters: any) {
   if (!db) return [];
+
+  // Look up active account
+  const activeAcct = await db
+    .select({ id: tradingAccounts.id })
+    .from(tradingAccounts)
+    .where(and(eq(tradingAccounts.userId, userId), eq(tradingAccounts.isActive, true)))
+    .limit(1)
+    .then((r) => r[0]);
+
   const query = db.select({
     id: trades.id,
     instrument: trades.instrument,
@@ -38,6 +47,10 @@ export async function handleGetTrades(userId: string, filters: any) {
   }).from(trades);
 
   const conditions: (SQL | undefined)[] = [eq(trades.userId, userId)];
+
+  if (activeAcct?.id) {
+    conditions.push(eq(trades.tradingAccountId, activeAcct.id));
+  }
 
   if (filters.assetClass) {
     conditions.push(eq(trades.assetClass, filters.assetClass));
@@ -92,6 +105,15 @@ export async function handleGetTradeStats(userId: string, filters: any) {
       totalPnl: 0,
     };
   }
+
+  // Look up active account
+  const activeAcct = await db
+    .select({ id: tradingAccounts.id })
+    .from(tradingAccounts)
+    .where(and(eq(tradingAccounts.userId, userId), eq(tradingAccounts.isActive, true)))
+    .limit(1)
+    .then((r) => r[0]);
+
   const query = db.select({
     id: trades.id,
     pnl: trades.pnl,
@@ -101,6 +123,10 @@ export async function handleGetTradeStats(userId: string, filters: any) {
   }).from(trades);
 
   const conditions: (SQL | undefined)[] = [eq(trades.userId, userId)];
+
+  if (activeAcct?.id) {
+    conditions.push(eq(trades.tradingAccountId, activeAcct.id));
+  }
 
   if (filters.assetClass) {
     conditions.push(eq(trades.assetClass, filters.assetClass));
@@ -216,8 +242,20 @@ export async function handleGetRankProgression(userId: string) {
     };
   }
 
-  const { trades, userSettings, capitalTransactions } = await import('@/db/schema');
+  const { trades, userSettings, capitalTransactions, tradingAccounts } = await import('@/db/schema');
   const { computeNetPnl, computeNetCapitalCashflow } = await import('@/lib/stats');
+
+  // Look up active account
+  const activeAcct = await db
+    .select({
+      id: tradingAccounts.id,
+      startingBalance: tradingAccounts.startingBalance,
+      highestAchievedLevel: tradingAccounts.highestAchievedLevel,
+    })
+    .from(tradingAccounts)
+    .where(and(eq(tradingAccounts.userId, userId), eq(tradingAccounts.isActive, true)))
+    .limit(1)
+    .then((r) => r[0]);
 
   const settingsRow = await db
     .select({
@@ -229,23 +267,28 @@ export async function handleGetRankProgression(userId: string) {
     .limit(1)
     .then((rows) => rows[0]);
 
-  const startingBalance = settingsRow?.startingBalance
-    ? Number(settingsRow.startingBalance)
-    : STARTING_BALANCE_DEFAULT;
+  const startingBalance = activeAcct?.startingBalance
+    ? Number(activeAcct.startingBalance)
+    : settingsRow?.startingBalance
+      ? Number(settingsRow.startingBalance)
+      : STARTING_BALANCE_DEFAULT;
 
-  const storedHighestLevel = settingsRow?.highestAchievedLevel ?? 0;
+  const storedHighestLevel = activeAcct?.highestAchievedLevel ?? settingsRow?.highestAchievedLevel ?? 0;
 
   let txRows: any[] = [];
   try {
-    txRows = await db
+    const txQuery = db
       .select({
         id: capitalTransactions.id,
         type: capitalTransactions.type,
         amount: capitalTransactions.amount,
         date: capitalTransactions.date,
       })
-      .from(capitalTransactions)
-      .where(eq(capitalTransactions.userId, userId));
+      .from(capitalTransactions);
+
+    txRows = activeAcct?.id
+      ? await txQuery.where(and(eq(capitalTransactions.userId, userId), eq(capitalTransactions.tradingAccountId, activeAcct.id)))
+      : await txQuery.where(eq(capitalTransactions.userId, userId));
   } catch (err) {
     console.warn('copilot-db capital_transactions query failed:', err);
   }

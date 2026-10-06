@@ -46,9 +46,16 @@ const DEFAULT_ITEMS: ChecklistItem[] = [
   { id: 'session-check', category: 'caveat', text: 'Trading session verified (No Asia, London onwards only)', checked: false },
 ];
 
+function resolveItemText(item: ChecklistItem, htf: string): string {
+  if (item.id === 'daily-fvg') return item.text.replace('Daily', htf);
+  if (item.id === 'daily-aesthetic') return item.text.replace('Daily', htf);
+  return item.text;
+}
+
 export function DisciplineChecklist({ trades }: DisciplineChecklistProps) {
   const [items, setItems] = useState<ChecklistItem[]>([]);
   const [mounted, setMounted] = useState(false);
+  const [higherTimeframe, setHigherTimeframe] = useState<'Daily' | 'Weekly' | '4H'>('Daily');
 
   // Target selection: 'new' or trade ID
   const [selectedTarget, setSelectedTarget] = useState<string>('new');
@@ -172,9 +179,14 @@ export function DisciplineChecklist({ trades }: DisciplineChecklistProps) {
     setFormSuccess(false);
 
     try {
+      const resolvedItems = items.map((item) => ({
+        ...item,
+        text: resolveItemText(item, higherTimeframe),
+      }));
+
       if (selectedTarget !== 'new') {
         // Attach rules directly to an existing taken or closed trade!
-        const res = await attachChecklistToTrade(selectedTarget, items);
+        const res = await attachChecklistToTrade(selectedTarget, resolvedItems);
         if (res.error) {
           setFormError(res.error);
         } else {
@@ -207,7 +219,7 @@ export function DisciplineChecklist({ trades }: DisciplineChecklistProps) {
           stopPrice: stopPrice ? Number(stopPrice) : null,
           targetPrice: targetPrice ? Number(targetPrice) : null,
           size: parsedSize,
-          checklist: items,
+          checklist: resolvedItems,
         });
 
         if (res.error) {
@@ -329,9 +341,20 @@ export function DisciplineChecklist({ trades }: DisciplineChecklistProps) {
       <div className="space-y-3">
         {/* Setup Section */}
         <div>
-          <span className="text-tertiary text-[9px] uppercase tracking-wider font-display block mb-1.5">
-            1. Higher Timeframe Setup
-          </span>
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-tertiary text-[9px] uppercase tracking-wider font-display block">
+              1. Higher Timeframe Setup
+            </span>
+            <select
+              value={higherTimeframe}
+              onChange={(e) => setHigherTimeframe(e.target.value as any)}
+              className="bg-surface-raised border border-hairline rounded px-2 py-0.5 text-[10px] text-secondary font-display uppercase tracking-wider focus:outline-none focus:ring-1 focus:ring-accent-signal cursor-pointer"
+            >
+              <option value="Daily">Daily</option>
+              <option value="Weekly">Weekly</option>
+              <option value="4H">4H</option>
+            </select>
+          </div>
           <div className="space-y-2">
             {items.filter(i => i.category === 'setup').map((item) => (
               <label 
@@ -345,7 +368,7 @@ export function DisciplineChecklist({ trades }: DisciplineChecklistProps) {
                   className="mt-0.5 border-hairline rounded bg-surface-raised text-accent-signal focus:ring-0 focus:ring-offset-0 focus-visible:ring-accent-signal focus-visible:outline-none w-3.5 h-3.5 cursor-pointer accent-accent-signal shrink-0"
                 />
                 <span className={cn("leading-relaxed", item.checked && "line-through text-tertiary")}>
-                  {item.text}
+                  {resolveItemText(item, higherTimeframe)}
                 </span>
               </label>
             ))}

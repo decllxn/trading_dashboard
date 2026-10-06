@@ -75,16 +75,34 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  let { data: rawTrades, error } = await supabase
+  // Resolve active trading account
+  const { data: activeAcctRow } = await supabase
+    .from('trading_accounts')
+    .select('id, name, starting_balance, highest_achieved_level')
+    .eq('user_id', user.id)
+    .eq('is_active', true)
+    .maybeSingle();
+  const activeAccountId = activeAcctRow?.id ?? null;
+
+  // Build trade query — scope to active account when available
+  let tradeQuery = supabase
     .from('trades')
     .select('id, pnl, commission, swap, fees, r_multiple, entry_time, exit_time, status, instrument, direction, entry_price, exit_price, size, stop_price, target_price, pretrade_checklist')
     .eq('user_id', user.id);
+  if (activeAccountId) {
+    tradeQuery = tradeQuery.eq('trading_account_id', activeAccountId);
+  }
+  let { data: rawTrades, error } = await tradeQuery;
 
   if (error && error.message?.includes('pretrade_checklist')) {
-    const retry = await supabase
+    let retryQuery = supabase
       .from('trades')
       .select('id, pnl, commission, swap, fees, r_multiple, entry_time, exit_time, status, instrument, direction, entry_price, exit_price, size, stop_price, target_price')
       .eq('user_id', user.id);
+    if (activeAccountId) {
+      retryQuery = retryQuery.eq('trading_account_id', activeAccountId);
+    }
+    const retry = await retryQuery;
 
     rawTrades = retry.data as any;
     error = retry.error;
@@ -103,23 +121,31 @@ export default async function DashboardPage() {
   }
 
   // User's configured starting capital & break even threshold
+  // Use active trading account's starting balance if available,
+  // otherwise fall back to user_settings.
   const { data: settingsRow } = await supabase
     .from('user_settings')
     .select('starting_balance, breakeven_threshold')
     .eq('user_id', user.id)
     .maybeSingle();
-  const startingBalance = settingsRow?.starting_balance
-    ? Number(settingsRow.starting_balance)
-    : STARTING_BALANCE_DEFAULT;
+  const startingBalance = activeAcctRow?.starting_balance
+    ? Number(activeAcctRow.starting_balance)
+    : settingsRow?.starting_balance
+      ? Number(settingsRow.starting_balance)
+      : STARTING_BALANCE_DEFAULT;
   const breakevenThreshold = resolveBreakevenThreshold(settingsRow?.breakeven_threshold);
 
-  // Fetch user's capital transactions (deposits & withdrawals)
+  // Fetch user's capital transactions (deposits & withdrawals) scoped to active account
   let rawCapitalTxs: any[] = [];
   try {
-    const res = await supabase
+    let capQuery = supabase
       .from('capital_transactions')
       .select('id, type, amount, date, broker_name, note')
       .eq('user_id', user.id);
+    if (activeAccountId) {
+      capQuery = capQuery.eq('trading_account_id', activeAccountId);
+    }
+    const res = await capQuery;
     if (res.data) rawCapitalTxs = res.data;
   } catch (err) {
     console.warn('Could not fetch capital_transactions:', err);
@@ -234,7 +260,7 @@ export default async function DashboardPage() {
     }
   }
 
-  // Fetch journal entries for mood over time
+  // Fetch journal entries for mood over time — scoped to active account dates
   const { data: journals } = await supabase
     .from('journal_entries')
     .select('date, mood')

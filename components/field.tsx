@@ -72,7 +72,7 @@ Select.displayName = 'Select';
 
 interface FieldProps {
   id: string;
-  label: string;
+  label: ReactNode;
   error?: string;
   children: ReactNode;
 }

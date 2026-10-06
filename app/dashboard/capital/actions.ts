@@ -40,6 +40,15 @@ export async function addCapitalTransaction(formData: FormData) {
   }
 
   try {
+    let activeAccountId: string | null = null;
+    const { data: activeAcct } = await supabase
+      .from('trading_accounts')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .maybeSingle();
+    activeAccountId = activeAcct?.id ?? null;
+
     if (db) {
       await db.insert(capitalTransactions).values({
         userId: user.id,
@@ -48,6 +57,7 @@ export async function addCapitalTransaction(formData: FormData) {
         date,
         brokerName,
         note,
+        tradingAccountId: activeAccountId,
       });
     } else {
       const { error } = await supabase.from('capital_transactions').insert({
@@ -57,6 +67,7 @@ export async function addCapitalTransaction(formData: FormData) {
         date: date.toISOString(),
         broker_name: brokerName,
         note,
+        trading_account_id: activeAccountId,
       });
       if (error) throw error;
     }

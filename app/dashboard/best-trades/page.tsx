@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { db } from '@/db';
 import { bestTrades, trades } from '@/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and } from 'drizzle-orm';
 import { decryptText, decryptJson } from '@/lib/crypto';
 import { BestTradesContainer } from './best-trades-container';
 
@@ -29,12 +29,28 @@ export default async function BestTradesPage() {
   if (!user) redirect('/login');
   if (!db) redirect('/login');
 
+  const { data: activeAcctRow } = await supabase
+    .from('trading_accounts')
+    .select('id')
+    .eq('user_id', user.id)
+    .eq('is_active', true)
+    .maybeSingle();
+  const activeAccountId = activeAcctRow?.id ?? null;
+
+  const bestTradesCondition = activeAccountId
+    ? and(eq(bestTrades.userId, user.id), eq(bestTrades.tradingAccountId, activeAccountId))
+    : eq(bestTrades.userId, user.id);
+
   // Query logged best trades
   const bestTradesRows = await db
     .select()
     .from(bestTrades)
-    .where(eq(bestTrades.userId, user.id))
+    .where(bestTradesCondition)
     .orderBy(desc(bestTrades.timeFormed));
+
+  const tradesCondition = activeAccountId
+    ? and(eq(trades.userId, user.id), eq(trades.tradingAccountId, activeAccountId))
+    : eq(trades.userId, user.id);
 
   // Query trades list for selection dropdown
   const tradesRows = await db
@@ -46,7 +62,7 @@ export default async function BestTradesPage() {
       rMultiple: trades.rMultiple,
     })
     .from(trades)
-    .where(eq(trades.userId, user.id))
+    .where(tradesCondition)
     .orderBy(desc(trades.entryTime));
 
   // Serialize models into stable JSON structures for client components with decryption
