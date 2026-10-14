@@ -207,10 +207,29 @@ class CTraderClientManager:
     # Async API for FastAPI endpoints
     # =========================================================================
 
+    async def ensure_connected(self, timeout: float = 10.0):
+        """Ensures the TCP client is running and authorized."""
+        if self._is_connected and self._app_authorized:
+            return
+
+        if not self.client or not getattr(self.client, "running", False):
+            logger.info("Starting cTrader TCP connection service on demand...")
+            reactor.callFromThread(self._retry_connection)
+
+        start = time.time()
+        while time.time() - start < timeout:
+            if self._is_connected and self._app_authorized:
+                return
+            await asyncio.sleep(0.2)
+
+        if not self._is_connected:
+            raise RuntimeError("Could not connect to cTrader TCP backend.")
+        if not self._app_authorized:
+            raise RuntimeError(f"cTrader app authorization failed: {self._app_auth_error}")
+
     async def _send_async(self, req_proto, timeout: float = 10.0) -> Any:
         """Sends a request through the Twisted client and awaits the response as an asyncio Future."""
-        if not self._is_connected or not self.client:
-            raise RuntimeError("Not connected to cTrader server.")
+        await self.ensure_connected(timeout=timeout)
 
         loop = asyncio.get_running_loop()
         future = loop.create_future()
@@ -229,7 +248,10 @@ class CTraderClientManager:
     def _resolve_future(self, future: asyncio.Future, res):
         if not future.done():
             payload = Protobuf.extract(res)
-            future.set_result(payload)
+            if hasattr(payload, "errorCode") and payload.errorCode:
+                future.set_exception(Exception(f"{payload.errorCode}: {getattr(payload, 'description', '')}"))
+            else:
+                future.set_result(payload)
 
     def _reject_future(self, future: asyncio.Future, fail):
         if not future.done():

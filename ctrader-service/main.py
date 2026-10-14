@@ -60,9 +60,24 @@ def get_authorization_url(redirect_uri: str = Query(...)):
 def exchange_token(req: AuthTokenRequest):
     try:
         data = exchange_code(req.code, req.redirect_uri)
-        if "errorCode" in data:
+        if data.get("errorCode"):
             raise HTTPException(status_code=400, detail=data.get("description", "Failed to exchange token"))
-        return data
+
+        access_token = data.get("accessToken") or data.get("access_token")
+        refresh_token_val = data.get("refreshToken") or data.get("refresh_token")
+        expires_in = data.get("expiresIn") or data.get("expires_in")
+
+        return {
+            "accessToken": access_token,
+            "access_token": access_token,
+            "refreshToken": refresh_token_val,
+            "refresh_token": refresh_token_val,
+            "expiresIn": expires_in,
+            "expires_in": expires_in,
+            "tokenType": data.get("tokenType") or data.get("token_type", "bearer"),
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Token exchange failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
@@ -71,7 +86,24 @@ def exchange_token(req: AuthTokenRequest):
 def refresh_token(req: AuthRefreshRequest):
     try:
         data = refresh_access_token(req.refresh_token, req.redirect_uri or "")
-        return data
+        if data.get("errorCode"):
+            raise HTTPException(status_code=400, detail=data.get("description", "Failed to refresh token"))
+
+        access_token = data.get("accessToken") or data.get("access_token")
+        refresh_token_val = data.get("refreshToken") or data.get("refresh_token")
+        expires_in = data.get("expiresIn") or data.get("expires_in")
+
+        return {
+            "accessToken": access_token,
+            "access_token": access_token,
+            "refreshToken": refresh_token_val,
+            "refresh_token": refresh_token_val,
+            "expiresIn": expires_in,
+            "expires_in": expires_in,
+            "tokenType": data.get("tokenType") or data.get("token_type", "bearer"),
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Token refresh failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))

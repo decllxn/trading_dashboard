@@ -88,7 +88,12 @@ export async function exchangeCTraderCode(
   if (!res.ok) {
     throw new Error(data.detail || data.description || 'Token exchange failed');
   }
-  return data;
+  return {
+    ...data,
+    accessToken: data.accessToken || data.access_token,
+    refreshToken: data.refreshToken || data.refresh_token,
+    expiresIn: data.expiresIn || data.expires_in,
+  };
 }
 
 /**

@@ -41,8 +41,12 @@ export async function GET(request: NextRequest) {
 
     // 1. Exchange code for access token
     const tokenData = await exchangeCTraderCode(code, redirectUri);
-    const accessToken = tokenData.accessToken;
-    const refreshToken = tokenData.refreshToken;
+    const accessToken = tokenData.accessToken || (tokenData as any).access_token;
+    const refreshToken = tokenData.refreshToken || (tokenData as any).refresh_token;
+
+    if (!accessToken) {
+      throw new Error('Access token was not returned by cTrader');
+    }
 
     // 2. Discover accounts under this cTID
     const discovered = await discoverCTraderAccounts(accessToken);
