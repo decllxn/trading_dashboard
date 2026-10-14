@@ -1,4 +1,5 @@
 import { computeRMultiple } from './trades.ts';
+import { computeNetPnl } from './stats.ts';
 import type { AssetClass, Direction, TradeStatus } from '../db/schema.ts';
 
 const CTRADER_SERVICE_URL =
@@ -49,6 +50,15 @@ export function inferAssetClass(symbol: string): AssetClass {
   }
 
   return 'forex';
+}
+
+/**
+ * In cTrader closed deals, deal.tradeSide is the closing order.
+ * Selling to close (closing order = 'short') means the original trade position was LONG.
+ * Buying to close (closing order = 'long') means the original trade position was SHORT.
+ */
+export function inferClosingPositionDirection(closingTradeSide: string): Direction {
+  return closingTradeSide === 'short' ? 'long' : 'short';
 }
 
 /**
@@ -167,8 +177,9 @@ export async function syncCTraderAccount(
 
   // 2. Fetch trader profile
   let balance = 0;
-  let brokerName = 'Pepperstone';
+  let brokerName = 'cTrader';
   let leverage = 100;
+  let login: number | null = null;
   try {
     const profileRes = await fetch(
       `${CTRADER_SERVICE_URL}/accounts/${acctNum}/profile`,
@@ -176,8 +187,9 @@ export async function syncCTraderAccount(
     if (profileRes.ok) {
       const profile = await profileRes.json();
       balance = profile.balance || 0;
-      brokerName = profile.brokerName || 'Pepperstone';
+      brokerName = profile.brokerName || 'cTrader';
       leverage = profile.leverage || 100;
+      login = profile.login || null;
     }
   } catch (e) {
     console.warn('Could not fetch trader profile:', e);
@@ -186,7 +198,7 @@ export async function syncCTraderAccount(
   // 3. Find active trading account for user
   const { data: activeAcct } = await supabase
     .from('trading_accounts')
-    .select('id')
+    .select('id, starting_balance')
     .eq('user_id', userId)
     .eq('is_active', true)
     .maybeSingle();
@@ -208,6 +220,7 @@ export async function syncCTraderAccount(
     await supabase
       .from('broker_connections')
       .update({
+        broker_name: brokerName,
         status: 'active',
         last_synced_at: new Date().toISOString(),
       })
@@ -237,6 +250,7 @@ export async function syncCTraderAccount(
         broker_connection_id: brokerConnectionId,
         trading_account_id: tradingAccountId,
         ctid_trader_account_id: ctidTraderAccountId,
+        account_number: login ? login.toString() : null,
         broker_title: brokerName,
         balance: balance.toString(),
         equity: balance.toString(),
@@ -266,6 +280,7 @@ export async function syncCTraderAccount(
 
   // 7. Fetch open positions
   let positionsCount = 0;
+  const activePositionExtIds: string[] = [];
   try {
     const posRes = await fetch(
       `${CTRADER_SERVICE_URL}/accounts/${acctNum}/positions`,
@@ -277,6 +292,7 @@ export async function syncCTraderAccount(
 
       for (const pos of positions) {
         const extId = `ctrader_pos_${pos.positionId}`;
+        activePositionExtIds.push(extId);
         const assetClass = inferAssetClass(pos.symbol);
         const direction: Direction = pos.direction === 'short' ? 'short' : 'long';
         const entryTime = pos.openTime
@@ -289,14 +305,6 @@ export async function syncCTraderAccount(
           null,
           direction,
         );
-
-        // Check if trade already exists
-        const { data: existing } = await supabase
-          .from('trades')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('external_trade_id', extId)
-          .maybeSingle();
 
         const tradeData = {
           user_id: userId,
@@ -318,11 +326,26 @@ export async function syncCTraderAccount(
           external_trade_id: extId,
         };
 
-        if (existing) {
-          await supabase.from('trades').update(tradeData).eq('id', existing.id);
-        } else {
-          await supabase.from('trades').insert(tradeData);
+        // Atomic upsert guarantees zero duplicates
+        await supabase.from('trades').upsert(tradeData, {
+          onConflict: 'user_id,external_trade_id',
+        });
+      }
+
+      // Clean up previously synced open positions that have since closed
+      if (brokerConnectionId) {
+        let deleteQuery = supabase
+          .from('trades')
+          .delete()
+          .eq('user_id', userId)
+          .eq('broker_connection_id', brokerConnectionId)
+          .eq('status', 'open')
+          .eq('source', 'ctrader');
+
+        if (activePositionExtIds.length > 0) {
+          deleteQuery = deleteQuery.not('external_trade_id', 'in', `(${activePositionExtIds.map(id => `"${id}"`).join(',')})`);
         }
+        await deleteQuery;
       }
     }
   } catch (err) {
@@ -346,10 +369,28 @@ export async function syncCTraderAccount(
       for (const deal of closedDeals) {
         const extId = `ctrader_deal_${deal.dealId}`;
         const assetClass = inferAssetClass(deal.symbol);
-        const direction: Direction = deal.tradeSide === 'short' ? 'short' : 'long';
+        
+        // In cTrader closed deals, deal.tradeSide is the closing order.
+        // Selling to close means the original trade position was LONG.
+        const direction: Direction = inferClosingPositionDirection(deal.tradeSide);
+        
         const exitTime = deal.executionTime
           ? new Date(deal.executionTime).toISOString()
           : new Date().toISOString();
+
+        // Always guarantee non-null entry_time for proper date sorting and hourly analytics
+        const entryTime = deal.openTime
+          ? new Date(deal.openTime).toISOString()
+          : exitTime;
+
+        // If an open position row existed for this position, clean it up so closed and open states don't coexist
+        if (deal.positionId) {
+          await supabase
+            .from('trades')
+            .delete()
+            .eq('user_id', userId)
+            .eq('external_trade_id', `ctrader_pos_${deal.positionId}`);
+        }
 
         const rMultiple = computeRMultiple(
           deal.entryPrice,
@@ -357,13 +398,6 @@ export async function syncCTraderAccount(
           deal.exitPrice,
           direction,
         );
-
-        const { data: existing } = await supabase
-          .from('trades')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('external_trade_id', extId)
-          .maybeSingle();
 
         const tradeData = {
           user_id: userId,
@@ -377,6 +411,7 @@ export async function syncCTraderAccount(
           entry_price: deal.entryPrice?.toString() ?? null,
           exit_price: deal.exitPrice?.toString() ?? null,
           size: deal.volume?.toString() ?? null,
+          entry_time: entryTime,
           exit_time: exitTime,
           pnl: deal.grossProfit?.toString() ?? null,
           commission: deal.commission?.toString() ?? null,
@@ -385,15 +420,68 @@ export async function syncCTraderAccount(
           external_trade_id: extId,
         };
 
-        if (existing) {
-          await supabase.from('trades').update(tradeData).eq('id', existing.id);
-        } else {
-          await supabase.from('trades').insert(tradeData);
-        }
+        // Atomic upsert on (user_id, external_trade_id)
+        await supabase.from('trades').upsert(tradeData, {
+          onConflict: 'user_id,external_trade_id',
+        });
       }
     }
   } catch (err) {
     console.error('Error syncing cTrader deals:', err);
+  }
+
+  // 9. Calibrate starting balance for active trading account so total equity matches live broker balance
+  if (tradingAccountId && balance > 0) {
+    try {
+      const { data: closedRows } = await supabase
+        .from('trades')
+        .select('pnl, commission, swap, fees')
+        .eq('user_id', userId)
+        .eq('trading_account_id', tradingAccountId)
+        .eq('status', 'closed');
+
+      let totalClosedNetPnl = 0;
+      if (closedRows) {
+        for (const row of closedRows) {
+          const net = computeNetPnl(
+            row.pnl ? Number(row.pnl) : null,
+            row.commission ? Number(row.commission) : null,
+            row.swap ? Number(row.swap) : null,
+            row.fees ? Number(row.fees) : null,
+          );
+          if (net != null) totalClosedNetPnl += net;
+        }
+      }
+
+      const { data: txRows } = await supabase
+        .from('capital_transactions')
+        .select('type, amount')
+        .eq('user_id', userId)
+        .eq('trading_account_id', tradingAccountId);
+
+      let netCashflow = 0;
+      if (txRows) {
+        for (const tx of txRows) {
+          const amt = Number(tx.amount) || 0;
+          if (tx.type === 'deposit') netCashflow += amt;
+          else if (tx.type === 'withdrawal') netCashflow -= amt;
+        }
+      }
+
+      // Baseline starting balance: brokerBalance - closedNetPnl - netCashflow
+      // Result: currentBalance = startingBalance + netCashflow + closedNetPnl === brokerBalance
+      const calibratedStartingBalance = Math.max(0, balance - totalClosedNetPnl - netCashflow);
+      
+      await supabase
+        .from('trading_accounts')
+        .update({
+          starting_balance: calibratedStartingBalance.toFixed(2),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', tradingAccountId);
+    } catch (calErr) {
+      console.warn('Could not calibrate starting balance:', calErr);
+    }
   }
 
   return { positionsCount, dealsCount, balance };

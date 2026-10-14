@@ -79,7 +79,9 @@ export default async function TradesPage() {
     { data: rawTags },
     { data: rawTradeTags },
   ] = await Promise.all([
-    tradesQuery.order('entry_time', { ascending: false, nullsFirst: false }),
+    tradesQuery
+      .order('entry_time', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false }),
     supabase
       .from('tags')
       .select('id, name, category')
@@ -103,7 +105,9 @@ export default async function TradesPage() {
       retryQuery = retryQuery.eq('trading_account_id', activeAccountId);
     }
     
-    const retry = await retryQuery.order('entry_time', { ascending: false, nullsFirst: false });
+    const retry = await retryQuery
+      .order('entry_time', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false });
 
     rawTrades = retry.data as any;
     tradesError = retry.error;

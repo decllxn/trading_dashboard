@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { inferAssetClass } from './ctrader.ts';
+import { inferAssetClass, inferClosingPositionDirection } from './ctrader.ts';
 
 describe('cTrader Integration Helpers', () => {
   it('correctly infers forex asset class', () => {
@@ -28,5 +28,12 @@ describe('cTrader Integration Helpers', () => {
     assert.equal(inferAssetClass('BTCUSD'), 'crypto');
     assert.equal(inferAssetClass('ETHUSD'), 'crypto');
     assert.equal(inferAssetClass('SOLUSD'), 'crypto');
+  });
+
+  it('correctly inverts closing order side to obtain true position direction', () => {
+    // A SELL order closing a deal means the original position was LONG
+    assert.equal(inferClosingPositionDirection('short'), 'long');
+    // A BUY order closing a deal means the original position was SHORT
+    assert.equal(inferClosingPositionDirection('long'), 'short');
   });
 });

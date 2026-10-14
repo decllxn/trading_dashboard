@@ -5,12 +5,18 @@ import { ChevronDown, LayoutGrid, Trophy } from 'lucide-react';
 import { AccountMenu } from './account-menu';
 import { resolveActiveLevel } from '@/lib/levels';
 
-function Selector({ label }: { label: string }) {
+function Selector({ label, isLive }: { label: string; isLive?: boolean }) {
   return (
     <button
       type="button"
-      className="text-secondary hover:text-primary flex items-center gap-1 rounded-card px-2 py-1 text-xs transition-colors duration-150"
+      className="text-secondary hover:text-primary flex items-center gap-1.5 rounded-card px-2 py-1 text-xs transition-colors duration-150"
     >
+      {isLive && (
+        <span className="relative flex h-1.5 w-1.5 items-center justify-center">
+          <span className="bg-gain absolute inline-flex h-full w-full animate-ping rounded-full opacity-75" />
+          <span className="bg-gain relative inline-flex h-1.5 w-1.5 rounded-full" />
+        </span>
+      )}
       <span className="num">{label}</span>
       <ChevronDown size={12} strokeWidth={1.75} />
     </button>
@@ -104,7 +110,10 @@ export function TopBar({ email, activeAccountName, activeBrokerName, currentBala
 
         {/* Static placeholder selectors */}
         <div className="hidden items-center gap-4 md:flex">
-          <Selector label={activeBrokerName || "Paper · Alpaca"} />
+          <Selector 
+            label={activeBrokerName || "Paper · Alpaca"} 
+            isLive={Boolean(activeBrokerName?.includes('cTrader'))} 
+          />
           <span className="border-hairline h-4 border-l" />
           <Selector label="1M" />
           <span className="border-hairline h-4 border-l" />

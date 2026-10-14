@@ -34,6 +34,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 
@@ -165,7 +166,9 @@ export const trades = pgTable('trades', {
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+}, (table) => ({
+  userExternalTradeIdUidx: uniqueIndex('trades_user_external_trade_id_uidx').on(table.userId, table.externalTradeId),
+}));
 
 /** Type helpers — import these in app code instead of re-deriving from the table. */
 export type Trade = typeof trades.$inferSelect;

@@ -55,7 +55,17 @@ export default async function DashboardLayout({
     .limit(1)
     .maybeSingle();
 
-  const activeBrokerName = connection
+  const { data: ctraderAcct } = await supabase
+    .from('ctrader_accounts')
+    .select('broker_title')
+    .eq('user_id', user.id)
+    .order('last_synced_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const activeBrokerName = ctraderAcct?.broker_title
+    ? `${ctraderAcct.broker_title} · cTrader`
+    : connection
     ? (connection.broker_name || connection.provider)
     : null;
 

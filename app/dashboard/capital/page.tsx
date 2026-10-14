@@ -15,7 +15,8 @@ import {
 } from '@/lib/stats';
 import { AddTransactionModal } from '@/components/capital/add-transaction-modal';
 import { TransactionList } from '@/components/capital/transaction-list';
-import { ArrowDownRight, ArrowUpRight, DollarSign, Wallet, PiggyBank, Scale } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, DollarSign, Wallet, PiggyBank, Scale, Activity, ArrowRight, CheckCircle2 } from 'lucide-react';
+import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,25 +31,38 @@ export default async function CapitalPage() {
 
   const { data: activeAcctRow } = await supabase
     .from('trading_accounts')
-    .select('id')
+    .select('id, name, starting_balance')
     .eq('user_id', user.id)
     .eq('is_active', true)
     .maybeSingle();
   const activeAccountId = activeAcctRow?.id ?? null;
+
+  // Check for connected cTrader account
+  const { data: ctraderAccount } = await supabase
+    .from('ctrader_accounts')
+    .select('broker_title, balance, equity, currency, last_synced_at, account_number')
+    .eq('user_id', user.id)
+    .order('last_synced_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   let startingBalance = STARTING_BALANCE_DEFAULT;
   let rawTransactions: StatCapitalTransaction[] = [];
   let totalTradingNetPnl = 0;
 
   if (db) {
-    const settingsRow = await db
-      .select({ startingBalance: userSettings.startingBalance })
-      .from(userSettings)
-      .where(eq(userSettings.userId, user.id))
-      .limit(1)
-      .then((rows) => rows[0]);
+    if (activeAcctRow?.starting_balance) {
+      startingBalance = Number(activeAcctRow.starting_balance);
+    } else {
+      const settingsRow = await db
+        .select({ startingBalance: userSettings.startingBalance })
+        .from(userSettings)
+        .where(eq(userSettings.userId, user.id))
+        .limit(1)
+        .then((rows) => rows[0]);
 
-    startingBalance = resolveStartingBalance(settingsRow?.startingBalance ?? null);
+      startingBalance = resolveStartingBalance(settingsRow?.startingBalance ?? null);
+    }
 
     let txRows: any[] = [];
     try {
@@ -108,13 +122,17 @@ export default async function CapitalPage() {
       }
     }
   } else {
-    const { data: settingsRow } = await supabase
-      .from('user_settings')
-      .select('starting_balance')
-      .eq('user_id', user.id)
-      .maybeSingle();
+    if (activeAcctRow?.starting_balance) {
+      startingBalance = Number(activeAcctRow.starting_balance);
+    } else {
+      const { data: settingsRow } = await supabase
+        .from('user_settings')
+        .select('starting_balance')
+        .eq('user_id', user.id)
+        .maybeSingle();
 
-    startingBalance = resolveStartingBalance(settingsRow?.starting_balance ?? null);
+      startingBalance = resolveStartingBalance(settingsRow?.starting_balance ?? null);
+    }
 
     let txsQuery = supabase
       .from('capital_transactions')
@@ -186,6 +204,41 @@ export default async function CapitalPage() {
           <AddTransactionModal />
         </div>
       </header>
+
+      {/* cTrader Live Telemetry Banner */}
+      {ctraderAccount && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-card border border-accent-signal/30 bg-surface/60 p-3.5 text-xs">
+          <div className="flex items-center gap-3">
+            <span className="relative flex h-2.5 w-2.5 items-center justify-center">
+              <span className="bg-gain absolute inline-flex h-full w-full animate-ping rounded-full opacity-75" />
+              <span className="bg-gain relative inline-flex h-2 w-2 rounded-full" />
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-primary font-display">
+                  {ctraderAccount.broker_title || 'cTrader'} Live Broker Telemetry
+                </span>
+                <span className="text-tertiary">·</span>
+                <span className="text-secondary font-mono">
+                  {ctraderAccount.account_number ? `Acct #${ctraderAccount.account_number}` : 'Connected'}
+                </span>
+              </div>
+              <p className="text-tertiary text-[11px] mt-0.5">
+                Broker Balance: <span className="text-primary font-mono font-semibold">${Number(ctraderAccount.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                <span className="mx-1.5 text-hairline">|</span>
+                Equity: <span className="text-gain font-mono font-semibold">${Number(ctraderAccount.equity).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/dashboard/settings"
+            className="flex items-center gap-1.5 text-accent-signal hover:text-accent-signal/80 font-medium transition-colors"
+          >
+            <span>Manage Connection & Sync</span>
+            <ArrowRight size={13} />
+          </Link>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
